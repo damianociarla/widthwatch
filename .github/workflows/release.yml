@@ -62,24 +62,8 @@ jobs:
           else
             npm publish --workspace widthwatch
           fi
-  deploy-site:
-    needs: publish-npm
-    runs-on: ubuntu-latest
-    environment: github-pages
-    permissions: { contents: read, pages: write, id-token: write }
-    steps:
-      - uses: actions/checkout@v6
-        with: { ref: "${{ env.RELEASE_TAG }}" }
-      - uses: actions/setup-node@v6
-        with: { node-version: 24, cache: npm }
-      - run: npm ci && npm run build --workspace @widthwatch/web
-        env: { VITE_API_URL: "${{ vars.VITE_API_URL }}" }
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v4
-        with: { path: apps/web/dist }
-      - uses: actions/deploy-pages@v4
   github-release:
-    needs: deploy-site
+    needs: publish-npm
     runs-on: ubuntu-latest
     permissions: { contents: write }
     steps:
