@@ -1,8 +1,10 @@
-export { scanResponsive } from "./scanner.js";
+export { scanAtWidths, scanResponsive } from "./scanner.js";
 export { compareReports } from "./compare.js";
 export { generateHtmlReport } from "./reporter.js";
 export type {
   CompareOptions,
+  ComparisonError,
+  ComparisonErrorCode,
   ComparisonReport,
   ElementRef,
   IssueKind,
@@ -15,4 +17,3 @@ export type {
   WidthTransition,
   WidthWatchReport,
 } from "./types.js";
-

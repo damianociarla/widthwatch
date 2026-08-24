@@ -10,6 +10,7 @@ interface ProbeResult {
 }
 
 interface ResolvedScanOptions {
+  exactWidths: number[] | undefined;
   minWidth: number;
   maxWidth: number;
   viewportHeight: number;
@@ -28,7 +29,7 @@ interface ResolvedScanOptions {
   allowedUrl: ScanOptions["allowedUrl"] | undefined;
 }
 
-const defaults: Omit<ResolvedScanOptions, "allowedUrl"> = {
+const defaults: Omit<ResolvedScanOptions, "allowedUrl" | "exactWidths"> = {
   minWidth: 320,
   maxWidth: 1440,
   viewportHeight: 900,
@@ -47,7 +48,19 @@ const defaults: Omit<ResolvedScanOptions, "allowedUrl"> = {
 };
 
 export async function scanResponsive(url: string, options: ScanOptions = {}): Promise<WidthWatchReport> {
-  const config: ResolvedScanOptions = { ...defaults, ...options, allowedUrl: options.allowedUrl, proxyServer: options.proxyServer };
+  const requestedWidths = options.exactWidths ? [...options.exactWidths] : undefined;
+  const derivableWidths = requestedWidths?.length && requestedWidths.every(Number.isFinite) ? requestedWidths : undefined;
+  const config: ResolvedScanOptions = {
+    ...defaults,
+    ...options,
+    ...(derivableWidths ? {
+      minWidth: options.minWidth ?? Math.min(...derivableWidths),
+      maxWidth: options.maxWidth ?? Math.max(...derivableWidths),
+    } : {}),
+    exactWidths: requestedWidths,
+    allowedUrl: options.allowedUrl,
+    proxyServer: options.proxyServer,
+  };
   validateOptions(config);
   const normalizedUrl = normalizeUrl(url);
   if (config.allowedUrl && !(await config.allowedUrl(normalizedUrl))) throw new Error("URL rejected by the configured network policy.");
@@ -68,13 +81,13 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
     await stabilizePage(page, config.hideSelectors, config.settleMs);
 
     const frames = new Map<number, LayoutFrame>();
-    const initialWidths = seedWidths(config.minWidth, config.maxWidth, config.initialStep);
+    const initialWidths = config.exactWidths ?? seedWidths(config.minWidth, config.maxWidth, config.initialStep);
     for (const width of initialWidths) {
-      if (frames.size >= config.maxSamples) break;
+      if (!config.exactWidths && frames.size >= config.maxSamples) break;
       frames.set(width, await captureFrame(page, width, config));
     }
 
-    while (frames.size < config.maxSamples) {
+    while (!config.exactWidths && frames.size < config.maxSamples) {
       const widths = [...frames.keys()].sort((a, b) => a - b);
       const candidates: Array<{ width: number; priority: number }> = [];
       for (let index = 0; index < widths.length - 1; index += 1) {
@@ -116,6 +129,10 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
     await context?.close();
     await browser.close();
   }
+}
+
+export function scanAtWidths(url: string, widths: number[], options: Omit<ScanOptions, "exactWidths"> = {}): Promise<WidthWatchReport> {
+  return scanResponsive(url, { ...options, exactWidths: widths });
 }
 
 async function installNetworkPolicy(context: BrowserContext, config: ResolvedScanOptions): Promise<void> {
@@ -314,6 +331,21 @@ function normalizeUrl(value: string): string {
 }
 
 function validateOptions(config: ResolvedScanOptions): void {
-  if (config.minWidth < 240 || config.maxWidth > 3840 || config.minWidth >= config.maxWidth) throw new Error("Width range must be between 240px and 3840px.");
-  if (config.maxSamples < 2 || config.maxSamples > 100) throw new Error("maxSamples must be between 2 and 100.");
+  const finiteInteger = (value: number) => Number.isFinite(value) && Number.isInteger(value);
+  if (!finiteInteger(config.minWidth) || !finiteInteger(config.maxWidth) || config.minWidth < 240 || config.maxWidth > 3840 || (config.exactWidths ? config.minWidth > config.maxWidth : config.minWidth >= config.maxWidth)) throw new Error("Width range must use whole pixels between 240px and 3840px.");
+  if (!finiteInteger(config.viewportHeight) || config.viewportHeight < 240 || config.viewportHeight > 4320) throw new Error("viewportHeight must be a whole number between 240 and 4320.");
+  if (!finiteInteger(config.initialStep) || config.initialStep < 1 || config.initialStep > 3840) throw new Error("initialStep must be a whole number between 1 and 3840.");
+  if (!finiteInteger(config.minStep) || config.minStep < 1 || config.minStep > 3840) throw new Error("minStep must be a whole number between 1 and 3840.");
+  if (!finiteInteger(config.maxSamples) || config.maxSamples < 2 || config.maxSamples > 100) throw new Error("maxSamples must be a whole number between 2 and 100.");
+  if (!finiteInteger(config.maxElements) || config.maxElements < 1 || config.maxElements > 10_000) throw new Error("maxElements must be a whole number between 1 and 10000.");
+  if (!finiteInteger(config.timeoutMs) || config.timeoutMs < 1 || config.timeoutMs > 300_000) throw new Error("timeoutMs must be a whole number between 1 and 300000.");
+  if (!finiteInteger(config.settleMs) || config.settleMs < 0 || config.settleMs > 30_000) throw new Error("settleMs must be a whole number between 0 and 30000.");
+  if (!finiteInteger(config.maxRequests) || config.maxRequests < 1 || config.maxRequests > 10_000) throw new Error("maxRequests must be a whole number between 1 and 10000.");
+  if (config.exactWidths) {
+    if (config.exactWidths.length < 1 || config.exactWidths.length > 100) throw new Error("exactWidths must contain between 1 and 100 widths.");
+    if (config.exactWidths.some((width) => !finiteInteger(width) || width < 240 || width > 3840)) throw new Error("exactWidths must contain whole pixels between 240 and 3840.");
+    if (new Set(config.exactWidths).size !== config.exactWidths.length) throw new Error("exactWidths must not contain duplicates.");
+    if (config.exactWidths.some((width) => width < config.minWidth || width > config.maxWidth)) throw new Error("exactWidths must stay inside the configured width range.");
+    config.exactWidths.sort((a, b) => a - b);
+  }
 }

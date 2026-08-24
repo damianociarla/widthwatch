@@ -7,17 +7,18 @@ npx widthwatch https://example.com --output widthwatch.html --json widthwatch.js
 ```
 
 ```ts
-import { scanResponsive, compareReports, generateHtmlReport } from "widthwatch";
+import { scanAtWidths, compareReports, generateHtmlReport } from "widthwatch";
 
-const candidate = await scanResponsive("http://localhost:4173", {
-  minWidth: 320,
-  maxWidth: 1600,
-  maxSamples: 28,
-});
+const candidate = await scanAtWidths(
+  "http://localhost:4173",
+  baseline.frames.map((frame) => frame.width),
+  { viewportHeight: baseline.range.height },
+);
 
 const comparison = compareReports(baseline, candidate, { maxDiffRatio: 0.002 });
 const html = generateHtmlReport(comparison);
 ```
 
-The hosted demo accepts only public HTTP(S) pages and applies separate safety limits. The local package intentionally gives the caller more control; do not scan untrusted URLs from a privileged network without an egress policy.
+Comparisons fail closed when widths, viewport dimensions, browser, platform, package version, or PNG dimensions are incompatible. `comparison.valid` explains whether a visual pass/fail decision is meaningful.
 
+The hosted demo accepts only public HTTP(S) pages and applies separate safety limits. The local package intentionally gives the caller more control; do not scan untrusted URLs from a privileged network without an egress policy.

@@ -23,6 +23,7 @@ if (heroWidth && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
 const observer = new IntersectionObserver((entries) => {
   for (const entry of entries) if (entry.isIntersecting) entry.target.classList.add("visible");
 }, { threshold: 0.18 });
+document.documentElement.classList.add("motion-ready");
 document.querySelectorAll(".reveal").forEach((element) => observer.observe(element));
 
 const form = document.querySelector<HTMLFormElement>("#scanForm");

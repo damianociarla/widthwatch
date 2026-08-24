@@ -69,16 +69,35 @@ export interface VisualDiff {
   diffScreenshot?: string;
 }
 
+export type ComparisonErrorCode =
+  | "range-mismatch"
+  | "environment-mismatch"
+  | "duplicate-width"
+  | "missing-candidate-frame"
+  | "unexpected-candidate-frame"
+  | "viewport-mismatch"
+  | "image-dimensions-mismatch"
+  | "invalid-screenshot";
+
+export interface ComparisonError {
+  code: ComparisonErrorCode;
+  message: string;
+  width?: number;
+}
+
 export interface ComparisonReport {
   version: 1;
   baseline: WidthWatchReport;
   candidate: WidthWatchReport;
   diffs: VisualDiff[];
   regressions: ResponsiveIssue[];
+  valid: boolean;
+  validationErrors: ComparisonError[];
   passed: boolean;
 }
 
 export interface ScanOptions {
+  exactWidths?: number[];
   minWidth?: number;
   maxWidth?: number;
   viewportHeight?: number;

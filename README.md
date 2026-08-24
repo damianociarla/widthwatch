@@ -2,8 +2,14 @@
 
 **Continuous responsive visual regression testing.** WidthWatch finds failures between the three breakpoints everybody remembered to screenshot.
 
+The npm package is not published yet. Until the first tagged beta, run the checked-out source directly:
+
 ```bash
-npx widthwatch https://example.com --output widthwatch.html --json widthwatch.json
+git clone https://github.com/damianociarla/widthwatch.git
+cd widthwatch
+npm ci
+npm run build --workspace widthwatch
+node packages/widthwatch/dist/cli.js https://example.com --output widthwatch.html --json widthwatch.json
 ```
 
 The engine returns versioned TypeScript objects, renders a portable interactive HTML report, and compares a candidate page with a baseline at matching widths. Its adaptive sampler discovers where geometry changes and spends the screenshot budget around those intervals instead of pretending that mobile/tablet/desktop are the whole responsive surface.
@@ -25,18 +31,21 @@ The engine returns versioned TypeScript objects, renders a portable interactive 
 
 ```ts
 import {
+  scanAtWidths,
   scanResponsive,
   compareReports,
   generateHtmlReport,
   type WidthWatchReport,
 } from "widthwatch";
 
-const candidate: WidthWatchReport = await scanResponsive("http://localhost:4173", {
-  minWidth: 320,
-  maxWidth: 1600,
-  maxSamples: 28,
+const candidate: WidthWatchReport = await scanAtWidths(
+  "http://localhost:4173",
+  baseline.frames.map((frame) => frame.width),
+  {
+  viewportHeight: baseline.range.height,
   hideSelectors: ["[data-live-clock]"],
-});
+  },
+);
 
 const comparison = compareReports(baseline, candidate, {
   maxDiffRatio: 0.002,
@@ -48,10 +57,10 @@ const html = generateHtmlReport(comparison);
 
 ## Pull-request use
 
-Build or deploy the candidate in CI, keep a trusted main-branch JSON baseline, then run:
+Build or deploy the candidate in CI and keep a trusted main-branch JSON baseline. The CLI reads that baseline before scanning and captures the candidate at exactly the same widths:
 
 ```bash
-npx widthwatch "$CANDIDATE_URL" \
+node packages/widthwatch/dist/cli.js "$CANDIDATE_URL" \
   --baseline .widthwatch/home.json \
   --json artifacts/home.json \
   --output artifacts/home.html \

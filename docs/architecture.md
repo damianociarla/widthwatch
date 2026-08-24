@@ -18,6 +18,8 @@ The first pass samples `minWidth`, `maxWidth`, and an initial coarse step. Each 
 
 Screenshots are intentionally captured in one pinned Chromium build. Playwright warns that host OS, browser version, fonts and other environment details affect image output, so baseline and candidate must use the same container.
 
+Explore scans choose widths adaptively. CI comparisons are deterministic: the baseline defines the exact width schedule, the candidate is recaptured at those widths, and the comparator fails closed if any frame, viewport, PNG dimension, or rendering-environment field is incompatible.
+
 ## Public request path
 
 ```text
