@@ -28,6 +28,14 @@ paths:
       operationId: getScan
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
       responses:
-        "200": { description: Job status and optional report }
+        "200": { description: Job status, optional report, and hosted report URL }
         "404": { description: Unknown or expired job }
-
+  /v1/reports/{id}:
+    get:
+      operationId: getReport
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        "200":
+          description: Interactive standalone HTML report
+          content: { text/html: { schema: { type: string } } }
+        "404": { description: Unknown, incomplete, or expired report }

@@ -29,6 +29,7 @@ const form = document.querySelector<HTMLFormElement>("#scanForm");
 const state = document.querySelector<HTMLElement>("#scanState");
 const message = document.querySelector<HTMLElement>("#scanMessage");
 const timeline = document.querySelector<HTMLElement>("#miniTimeline");
+const reportLink = document.querySelector<HTMLAnchorElement>("#reportLink");
 form?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const data = new FormData(form);
@@ -37,6 +38,7 @@ form?.addEventListener("submit", async (event) => {
   state.textContent = "● validating";
   message.textContent = "Checking URL and public network policy…";
   timeline.innerHTML = "";
+  if (reportLink) reportLink.hidden = true;
   const apiUrl = import.meta.env.VITE_API_URL as string | undefined;
   try {
     if (apiUrl) {
@@ -49,7 +51,7 @@ form?.addEventListener("submit", async (event) => {
         await new Promise((resolve) => window.setTimeout(resolve, 2_000));
         const statusResponse = await fetch(`${apiUrl.replace(/\/$/, "")}/v1/scans/${job.id}`);
         if (!statusResponse.ok) throw new Error("The scan result is no longer available.");
-        const result = await statusResponse.json() as { status: string; error?: string; report?: { frames: Array<{ width: number; issues: Array<{ severity: string }> }>; summary: { errors: number; warnings: number } } };
+        const result = await statusResponse.json() as { status: string; error?: string; reportUrl?: string; report?: { frames: Array<{ width: number; issues: Array<{ severity: string }> }>; summary: { errors: number; warnings: number } } };
         state.textContent = `● ${result.status}`;
         if (result.status === "failed") throw new Error(result.error ?? "The bounded scan could not complete.");
         if (result.status !== "complete" || !result.report) { message.textContent = `Scanning public page · ${attempt + 1}s elapsed`; continue; }
@@ -61,6 +63,10 @@ form?.addEventListener("submit", async (event) => {
           timeline.append(mark);
         }
         message.textContent = `${result.report.summary.errors} errors and ${result.report.summary.warnings} warnings across ${result.report.frames.length} adaptive widths.`;
+        if (reportLink && result.reportUrl) {
+          reportLink.href = `${apiUrl.replace(/\/$/, "")}${result.reportUrl}`;
+          reportLink.hidden = false;
+        }
         return;
       }
       throw new Error("The public scan exceeded its result window. Use the local package for larger pages.");

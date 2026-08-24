@@ -1,6 +1,6 @@
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { scanResponsive, type WidthWatchReport } from "widthwatch";
+import { generateHtmlReport, scanResponsive, type WidthWatchReport } from "widthwatch";
 import { startPinnedEgressProxy } from "./egress-proxy.js";
 import { assertPublicUrl, resolvePublicTarget, UnsafeUrlError } from "./network-policy.js";
 import { consumeRateLimits, SlidingWindowLimiter } from "./security.js";
@@ -24,6 +24,8 @@ const server = createServer(async (request, response) => {
   if (request.url === "/v1/scans" && request.method === "POST") return void createScan(request, response);
   const match = request.method === "GET" ? request.url?.match(/^\/v1\/scans\/([a-f0-9-]+)$/) : null;
   if (match?.[1]) return void getScan(match[1], response);
+  const reportMatch = request.method === "GET" ? request.url?.match(/^\/v1\/reports\/([a-f0-9-]+)$/) : null;
+  if (reportMatch?.[1]) return void getReport(reportMatch[1], response);
   return json(response, 404, { error: "not_found" });
 });
 
@@ -46,7 +48,24 @@ async function createScan(request: IncomingMessage, response: ServerResponse): P
 function getScan(id: string, response: ServerResponse): void {
   const job = jobs.get(id);
   if (!job) return json(response, 404, { error: "not_found" });
-  json(response, 200, { id: job.id, status: job.status, ...(job.report ? { report: job.report } : {}), ...(job.error ? { error: job.error } : {}) });
+  json(response, 200, {
+    id: job.id,
+    status: job.status,
+    ...(job.report ? { report: job.report, reportUrl: `/v1/reports/${job.id}` } : {}),
+    ...(job.error ? { error: job.error } : {}),
+  });
+}
+
+function getReport(id: string, response: ServerResponse): void {
+  const job = jobs.get(id);
+  if (!job?.report || job.status !== "complete") return json(response, 404, { error: "not_found" });
+  response.writeHead(200, {
+    "content-type": "text/html; charset=utf-8",
+    "cache-control": "private, max-age=60",
+    "content-security-policy": "default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+    "referrer-policy": "no-referrer",
+    "x-content-type-options": "nosniff",
+  }).end(generateHtmlReport(job.report));
 }
 
 async function drain(): Promise<void> {

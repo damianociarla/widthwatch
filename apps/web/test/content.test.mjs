@@ -7,6 +7,8 @@ test("landing exposes the scanner, docs and package command", async () => {
   assert.match(html, /Trace a public page/);
   assert.match(html, /npx widthwatch/);
   assert.match(html, /docs\.html/);
+  assert.match(html, /id="reportLink"/);
+  assert.match(html, /Open interactive report/);
 });
 
 test("production build uses the GitHub Pages repository base path", async () => {

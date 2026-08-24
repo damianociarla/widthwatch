@@ -17,6 +17,7 @@ The engine returns versioned TypeScript objects, renders a portable interactive 
 - PNG pixel comparison with candidate/baseline regression output;
 - CLI, TypeScript API and native standalone HTML reporter;
 - product website, documentation and bounded public-scanner UI;
+- shareable interactive online reports for completed public scans;
 - protected AWS App Runner API with DNS-pinned egress, quotas and a one-instance hard cap;
 - GitHub Actions for CI, Pages, npm trusted publishing and AWS OIDC deployment.
 
@@ -90,7 +91,7 @@ npm start --workspace @widthwatch/api
 
 ## Public demo limits
 
-The hosted surface is intentionally not the local package in the cloud. It accepts one credential-free public page, uses 12 adaptive widths, blocks media, caps navigation at 15 seconds and 250 requests, admits at most three queued jobs, runs one browser, and expires in-memory results after 30 minutes. Separate client, target, global, CloudFront/WAF and compute limits prevent arbitrary scale-out.
+The hosted surface is intentionally not the local package in the cloud. It accepts one credential-free public page, uses 12 adaptive widths, blocks media, caps navigation at 15 seconds and 250 requests, admits at most three queued jobs, runs one browser, and exposes a shareable interactive report for 30 minutes. Separate client, target, global, CloudFront/WAF and compute limits prevent arbitrary scale-out.
 
 See [architecture](docs/architecture.md), [OpenAPI](docs/openapi.yml), and [security policy](SECURITY.md).
 
@@ -108,4 +109,3 @@ A `v*` tag validates, deploys the API, publishes npm, publishes the website, and
 ## License
 
 MIT © Damiano Ciarla
-

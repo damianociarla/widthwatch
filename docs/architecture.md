@@ -6,6 +6,8 @@
 2. `@widthwatch/web`: static landing page, documentation and bounded public demo client on GitHub Pages.
 3. `@widthwatch/api`: a deliberately small admission API and one in-process browser worker on AWS App Runner.
 
+Completed demo scans expose the same standalone reporter used by the npm package at `/v1/reports/{id}`. The URL is shareable but intentionally ephemeral: the in-memory report expires after 30 minutes and disappears on a worker restart. Persistent team history belongs in the authenticated product tier, backed by object storage rather than the public demo.
+
 The package remains the product. The hosted demo is a constrained preview, not a free remote browser farm.
 
 ## Continuous-width engine
@@ -28,4 +30,3 @@ For a paid or multi-tenant product, replace the in-memory queue with DynamoDB + 
 ## Release order
 
 A `v*` tag validates the exact artifact, deploys the bounded API, publishes npm through trusted OIDC publishing, deploys GitHub Pages, and creates the GitHub Release. AWS access uses GitHub OIDC and short-lived credentials. Production is a protected GitHub environment.
-
