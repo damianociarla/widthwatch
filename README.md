@@ -97,14 +97,16 @@ See [architecture](docs/architecture.md), [OpenAPI](docs/openapi.yml), and [secu
 
 ## Deployment bootstrap
 
-1. Create the App Runner ECR access role and a least-privilege GitHub OIDC deploy role.
+1. Deploy `infra/aws/github-deploy-role.yml` once, reusing the account-level GitHub OIDC provider.
 2. Configure protected GitHub environment `production`.
-3. Add repository variables `AWS_ACCOUNT_ID`, `AWS_DEPLOY_ROLE_ARN`, `AWS_ECR_ACCESS_ROLE_ARN`, and `VITE_API_URL`.
+3. Add repository variables `AWS_ACCOUNT_ID`, `AWS_DEPLOY_ROLE_ARN`, `AWS_CLOUDFORMATION_ROLE_ARN`, `AWS_ECR_ACCESS_ROLE_ARN`, and `VITE_API_URL`.
 4. Add `WIDTHWATCH_ORIGIN_VERIFY_TOKEN` as an environment secret.
 5. Configure npm trusted publishing for repository `damianociarla/widthwatch`, workflow `release.yml`, environment `production`.
 6. Enable GitHub Pages with GitHub Actions as its source.
 
 A `v*` tag validates, deploys the API, publishes npm, publishes the website, and creates the GitHub Release. AWS credentials are short-lived through GitHub OIDC; npm trusted publishing also uses OIDC and emits provenance.
+
+The `Deploy API` workflow can bootstrap or redeploy only the hosted scanner without publishing an npm release.
 
 ## License
 

@@ -37,7 +37,9 @@ jobs:
         env:
           AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
           AWS_ECR_ACCESS_ROLE_ARN: ${{ vars.AWS_ECR_ACCESS_ROLE_ARN }}
+          AWS_CLOUDFORMATION_ROLE_ARN: ${{ vars.AWS_CLOUDFORMATION_ROLE_ARN }}
           WIDTHWATCH_ORIGIN_VERIFY_TOKEN: ${{ secrets.WIDTHWATCH_ORIGIN_VERIFY_TOKEN }}
+          WIDTHWATCH_BUDGET_ALERT_EMAIL: ${{ secrets.WIDTHWATCH_BUDGET_ALERT_EMAIL }}
           WIDTHWATCH_IMAGE_TAG: ${{ env.RELEASE_TAG }}
   publish-npm:
     needs: deploy-api
@@ -76,4 +78,3 @@ jobs:
         with: { ref: "${{ env.RELEASE_TAG }}" }
       - run: gh release create "$RELEASE_TAG" --verify-tag --generate-notes --title "WidthWatch $RELEASE_TAG"
         env: { GH_TOKEN: "${{ github.token }}" }
-

@@ -1,0 +1,200 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Least-privilege GitHub OIDC and CloudFormation roles for WidthWatch
+
+Parameters:
+  GitHubOwner:
+    Type: String
+    Default: damianociarla
+  GitHubRepository:
+    Type: String
+    Default: widthwatch
+  GitHubOwnerId:
+    Type: String
+    Default: "2201712"
+  GitHubRepositoryId:
+    Type: String
+    Default: "1344710185"
+  ReleaseEnvironmentName:
+    Type: String
+    Default: production
+    AllowedPattern: "[A-Za-z0-9._-]+"
+  ExistingGitHubOidcProviderArn:
+    Type: String
+    Description: Account-level GitHub Actions OIDC provider ARN
+
+Resources:
+  ApplicationRoleBoundary:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: widthwatch-application-role-boundary
+      Description: Maximum permissions available to the WidthWatch App Runner image pull role
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: ecr:GetAuthorizationToken
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - ecr:GetDownloadUrlForLayer
+              - ecr:BatchGetImage
+              - ecr:DescribeImages
+              - ecr:BatchCheckLayerAvailability
+            Resource: !Sub "arn:${AWS::Partition}:ecr:eu-west-1:${AWS::AccountId}:repository/widthwatch-api"
+
+  AppRunnerEcrAccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: widthwatch-apprunner-ecr-access
+      PermissionsBoundary: !Ref ApplicationRoleBoundary
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: build.apprunner.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: WidthWatchEcrRead
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:DescribeImages
+                  - ecr:BatchCheckLayerAvailability
+                Resource: !Sub "arn:${AWS::Partition}:ecr:eu-west-1:${AWS::AccountId}:repository/widthwatch-api"
+
+  CloudFormationExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: widthwatch-cloudformation-execution
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: cloudformation.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: WidthWatchInfrastructure
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [iam:GetRole, iam:PassRole]
+                Resource: !GetAtt AppRunnerEcrAccessRole.Arn
+              - Effect: Allow
+                Action: iam:CreateServiceLinkedRole
+                Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/apprunner.amazonaws.com/AWSServiceRoleForAppRunner"
+                Condition:
+                  StringEquals: { "iam:AWSServiceName": apprunner.amazonaws.com }
+              - Effect: Allow
+                Action:
+                  - apprunner:CreateService
+                  - apprunner:DeleteService
+                  - apprunner:DescribeService
+                  - apprunner:UpdateService
+                  - apprunner:ListOperations
+                  - apprunner:CreateAutoScalingConfiguration
+                  - apprunner:DeleteAutoScalingConfiguration
+                  - apprunner:DescribeAutoScalingConfiguration
+                  - apprunner:ListAssociatedServicesForAutoScalingConfiguration
+                  - apprunner:ListTagsForResource
+                  - apprunner:TagResource
+                  - apprunner:UntagResource
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:apprunner:eu-west-1:${AWS::AccountId}:service/widthwatch-api/*"
+                  - !Sub "arn:${AWS::Partition}:apprunner:eu-west-1:${AWS::AccountId}:autoscalingconfiguration/widthwatch-hard-cap/*"
+              - Effect: Allow
+                Action:
+                  - cloudfront:CreateDistribution
+                  - cloudfront:CreateOriginRequestPolicy
+                  - cloudfront:DeleteDistribution
+                  - cloudfront:DeleteOriginRequestPolicy
+                  - cloudfront:GetDistribution
+                  - cloudfront:GetDistributionConfig
+                  - cloudfront:GetOriginRequestPolicy
+                  - cloudfront:GetOriginRequestPolicyConfig
+                  - cloudfront:ListDistributions
+                  - cloudfront:ListOriginRequestPolicies
+                  - cloudfront:ListTagsForResource
+                  - cloudfront:TagResource
+                  - cloudfront:UntagResource
+                  - cloudfront:UpdateDistribution
+                  - cloudfront:UpdateOriginRequestPolicy
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - wafv2:CreateWebACL
+                  - wafv2:DeleteWebACL
+                  - wafv2:GetWebACL
+                  - wafv2:UpdateWebACL
+                  - wafv2:ListTagsForResource
+                  - wafv2:TagResource
+                  - wafv2:UntagResource
+                  - wafv2:DescribeManagedRuleGroup
+                Resource: "*"
+              - Effect: Allow
+                Action: [budgets:ModifyBudget, budgets:ViewBudget]
+                Resource: !Sub "arn:${AWS::Partition}:budgets::${AWS::AccountId}:budget/widthwatch-monthly-cost"
+
+  GitHubDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: widthwatch-github-deploy
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Federated: !Ref ExistingGitHubOidcProviderArn }
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubOwner}@${GitHubOwnerId}/${GitHubRepository}@${GitHubRepositoryId}:environment:${ReleaseEnvironmentName}"
+      Policies:
+        - PolicyName: WidthWatchReleaseDeploy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [ecr:GetAuthorizationToken, ecr:DescribeRepositories, ecr:CreateRepository]
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:DescribeImages
+                  - ecr:CompleteLayerUpload
+                  - ecr:InitiateLayerUpload
+                  - ecr:PutImage
+                  - ecr:UploadLayerPart
+                Resource: !Sub "arn:${AWS::Partition}:ecr:eu-west-1:${AWS::AccountId}:repository/widthwatch-api"
+              - Effect: Allow
+                Action:
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:CreateStack
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DeleteChangeSet
+                  - cloudformation:ExecuteChangeSet
+                  - cloudformation:GetTemplateSummary
+                  - cloudformation:UpdateStack
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:cloudformation:eu-west-1:${AWS::AccountId}:stack/widthwatch-api/*"
+                  - !Sub "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:stack/widthwatch-edge/*"
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt CloudFormationExecutionRole.Arn
+
+Outputs:
+  GitHubDeployRoleArn:
+    Value: !GetAtt GitHubDeployRole.Arn
+  CloudFormationExecutionRoleArn:
+    Value: !GetAtt CloudFormationExecutionRole.Arn
+  ApplicationRoleArn:
+    Value: !GetAtt AppRunnerEcrAccessRole.Arn
