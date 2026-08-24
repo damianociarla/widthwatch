@@ -250,8 +250,13 @@ async function preparePage(page: Page, url: string, width: number, config: Resol
   if (config.pageReady) await withTimeout(Promise.resolve(config.pageReady(page, { url, width })), config.pageReadyTimeoutMs, "pageReady hook");
   await page.evaluate(async () => { await document.fonts.ready; });
   if (config.scrollSweep) await scrollSweep(page, config.maxScrollSteps, config.settleMs);
-  await page.evaluate(async (timeoutMs) => {
-    const pending = [...document.images].filter((image) => !image.complete);
+  await page.evaluate(async ({ timeoutMs, waitForFullPage }) => {
+    const pending = [...document.images].filter((image) => {
+      if (image.complete) return false;
+      if (waitForFullPage) return true;
+      const rect = image.getBoundingClientRect();
+      return rect.bottom >= 0 && rect.top <= window.innerHeight && rect.right >= 0 && rect.left <= window.innerWidth;
+    });
     if (pending.length) await Promise.race([
       Promise.all(pending.map((image) => new Promise<void>((resolve) => {
         image.addEventListener("load", () => resolve(), { once: true });
@@ -260,7 +265,7 @@ async function preparePage(page: Page, url: string, width: number, config: Resol
       new Promise<void>((resolve) => window.setTimeout(resolve, timeoutMs)),
     ]);
     window.scrollTo(0, 0);
-  }, Math.min(config.timeoutMs, 5_000));
+  }, { timeoutMs: Math.min(config.timeoutMs, 5_000), waitForFullPage: config.screenshot === "full-page" });
   await page.waitForTimeout(config.settleMs);
 }
 

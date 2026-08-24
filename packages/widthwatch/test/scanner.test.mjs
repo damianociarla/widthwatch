@@ -45,6 +45,16 @@ test("standalone scans can use bounded JPEG evidence", async (context) => {
   assert.match(result.frames[0].screenshot, /^data:image\/jpeg;base64,/);
 });
 
+test("viewport layout scans do not wait for offscreen lazy images", async (context) => {
+  const url = await fixture(context, (request, response) => {
+    if (request.url === "/never-loads.png") return;
+    html(response, '<div style="height:2000px"></div><img loading="lazy" src="/never-loads.png" alt="offscreen">');
+  });
+  const started = Date.now();
+  await scanAtWidths(url, [320], { mode: "layout", viewportHeight: 480, settleMs: 0 });
+  assert.ok(Date.now() - started < 1_500, "Offscreen image extended a viewport-only scan.");
+});
+
 test("visual mode scrolls through lazy content and captures the full page", async (context) => {
   const url = await fixture(context, (_request, response) => html(response, `
     <div style="height:900px">above fold</div>
