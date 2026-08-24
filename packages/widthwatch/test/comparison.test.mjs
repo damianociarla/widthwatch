@@ -91,6 +91,18 @@ test("different capture modes fail closed", () => {
   assert.equal(comparison.validationErrors[0].code, "capture-mismatch");
 });
 
+test("lossy screenshots fail closed for pixel comparison", () => {
+  const baseline = report([320]);
+  const candidate = report([320]);
+  baseline.capture.imageFormat = "jpeg";
+  candidate.capture.imageFormat = "jpeg";
+  baseline.frames[0].screenshot = "data:image/jpeg;base64,AA==";
+  candidate.frames[0].screenshot = "data:image/jpeg;base64,AA==";
+  const result = compareReports(baseline, candidate);
+  assert.equal(result.valid, false);
+  assert.ok(result.validationErrors.some((error) => error.code === "invalid-screenshot"));
+});
+
 test("different readiness keys fail closed", () => {
   const baseline = report([320], { capture: { mode: "visual", screenshot: "full-page", scrollSweep: true, reloadPerWidth: true, pageReady: true, readinessKey: "ready-v1" } });
   const candidate = report([320], { capture: { mode: "visual", screenshot: "full-page", scrollSweep: true, reloadPerWidth: true, pageReady: true, readinessKey: "ready-v2" } });

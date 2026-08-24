@@ -29,6 +29,8 @@ interface ResolvedScanOptions {
   readinessKey: string | undefined;
   pageReadyTimeoutMs: number;
   screenshot: "viewport" | "full-page";
+  imageFormat: "png" | "jpeg";
+  imageQuality: number;
   headless: boolean;
   blockResourceTypes: string[];
   hideSelectors: string[];
@@ -54,6 +56,8 @@ const defaults: Omit<ResolvedScanOptions, "allowedUrl" | "exactWidths" | "pageRe
   reloadPerWidth: false,
   pageReadyTimeoutMs: 10_000,
   screenshot: "full-page" as const,
+  imageFormat: "png" as const,
+  imageQuality: 80,
   headless: true,
   blockResourceTypes: ["media"],
   hideSelectors: [] as string[],
@@ -147,6 +151,7 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
       capture: {
         mode: config.mode,
         screenshot: config.screenshot,
+        imageFormat: config.imageFormat,
         scrollSweep: config.scrollSweep,
         reloadPerWidth: config.reloadPerWidth,
         pageReady: Boolean(config.pageReady),
@@ -252,14 +257,16 @@ async function captureFrame(page: Page, url: string, width: number, config: Reso
   if (config.reloadPerWidth) await navigate(page, url, config);
   await preparePage(page, url, width, config);
   const probe = await page.evaluate(probePage, { width, maxElements: config.maxElements, maxDomNodes: config.maxDomNodes });
-  const screenshot = await page.screenshot({ fullPage: config.screenshot === "full-page", type: "png", animations: "disabled" });
+  const screenshot = config.imageFormat === "jpeg"
+    ? await page.screenshot({ fullPage: config.screenshot === "full-page", type: "jpeg", quality: config.imageQuality, animations: "disabled" })
+    : await page.screenshot({ fullPage: config.screenshot === "full-page", type: "png", animations: "disabled" });
   return {
     width,
     height: config.viewportHeight,
     document: probe.document,
     layoutSignature: probe.signature,
     issues: probe.issues,
-    screenshot: `data:image/png;base64,${screenshot.toString("base64")}`,
+    screenshot: `data:image/${config.imageFormat};base64,${screenshot.toString("base64")}`,
     durationMs: Date.now() - started,
   };
 }
@@ -424,6 +431,8 @@ function validateOptions(config: ResolvedScanOptions): void {
   const finiteInteger = (value: number) => Number.isFinite(value) && Number.isInteger(value);
   if (!(["layout", "visual"] as const).includes(config.mode)) throw new Error("mode must be layout or visual.");
   if (!(["viewport", "full-page"] as const).includes(config.screenshot)) throw new Error("screenshot must be viewport or full-page.");
+  if (!(["png", "jpeg"] as const).includes(config.imageFormat)) throw new Error("imageFormat must be png or jpeg.");
+  if (!finiteInteger(config.imageQuality) || config.imageQuality < 1 || config.imageQuality > 100) throw new Error("imageQuality must be a whole number between 1 and 100.");
   if (typeof config.scrollSweep !== "boolean" || typeof config.reloadPerWidth !== "boolean" || typeof config.headless !== "boolean") throw new Error("scrollSweep, reloadPerWidth and headless must be booleans.");
   if (config.pageReady !== undefined && typeof config.pageReady !== "function") throw new Error("pageReady must be a function.");
   if (config.pageReady && (typeof config.readinessKey !== "string" || !config.readinessKey.trim())) throw new Error("readinessKey is required when pageReady is configured.");

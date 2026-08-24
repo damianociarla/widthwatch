@@ -29,6 +29,7 @@ The engine returns versioned TypeScript objects, renders a portable interactive 
 - issue ranges such as `742–811px` instead of disconnected frame findings;
 - full-page visual mode with bounded scroll sweep and lazy-content activation;
 - optional reload-per-width and application-specific Playwright readiness hook;
+- optional compact JPEG evidence for standalone diagnostics;
 - PNG pixel comparison with candidate/baseline regression output;
 - CLI, TypeScript API and native standalone HTML reporter;
 - `widthwatch.config.ts` plus a generated reusable GitHub workflow;
@@ -120,7 +121,7 @@ npm start --workspace @widthwatch/api
 
 ## Public demo limits
 
-The hosted surface is intentionally not the local package in the cloud. It accepts one credential-free public page, uses 8 adaptive widths, blocks media, caps navigation at 15 seconds and 250 requests, admits at most three queued jobs, and runs one browser. Job status remains in memory for 30 minutes; when `AWS_INSTANCE_ROLE_ARN` is configured, completed HTML reports are stored in a private encrypted S3 bucket and expire automatically after 7 days. The admission request streams lightweight heartbeats while the browser works so App Runner does not throttle detached CPU, while status polling returns lightweight metadata rather than embedded screenshots. Separate client, target, global, CloudFront/WAF and compute limits prevent arbitrary scale-out. The local package keeps its larger 24-sample default for CI and detailed analysis.
+The hosted surface is intentionally not the local package in the cloud. It accepts one credential-free public page, uses 5 adaptive widths with compact JPEG evidence, blocks media, caps navigation at 15 seconds and 200 requests, admits at most three queued jobs, and runs one browser. Job status remains in memory for 30 minutes; when `AWS_INSTANCE_ROLE_ARN` is configured, completed HTML reports are stored in a private encrypted S3 bucket and expire automatically after 7 days. The admission request streams lightweight heartbeats while the browser works so App Runner does not throttle detached CPU, while status polling returns lightweight metadata rather than embedded screenshots. Separate client, target, global, CloudFront/WAF and compute limits prevent arbitrary scale-out. The local package keeps its lossless PNG evidence and larger 24-sample default for CI and detailed analysis.
 
 See [architecture](docs/architecture.md), [OpenAPI](docs/openapi.yml), and [security policy](SECURITY.md).
 

@@ -31,7 +31,7 @@ const comparison = compareReports(baseline, candidate, { maxDiffRatio: 0.002 });
 const html = generateHtmlReport(comparison);
 ```
 
-`visual` mode is the default: it waits for fonts, performs a bounded scroll sweep to activate lazy content and IntersectionObservers, returns to the top, and captures a full-page PNG. Use `{ mode: "layout" }` for a faster viewport-only geometry probe. `reloadPerWidth` reruns page initialization at each width, while `pageReady` provides an application-specific Playwright hook. Every hook requires a versioned `readinessKey`, which is stored in the report and checked during comparison.
+`visual` mode is the default: it waits for fonts, performs a bounded scroll sweep to activate lazy content and IntersectionObservers, returns to the top, and captures a full-page PNG. Use `{ mode: "layout" }` for a faster viewport-only geometry probe. Standalone diagnostic reports can opt into `{ imageFormat: "jpeg", imageQuality: 70 }`; pixel comparisons intentionally require lossless PNG evidence. `reloadPerWidth` reruns page initialization at each width, while `pageReady` provides an application-specific Playwright hook. Every hook requires a versioned `readinessKey`, which is stored in the report and checked during comparison.
 
 Comparisons fail closed when widths, viewport dimensions, capture settings, browser, platform, package version, or PNG dimensions are incompatible. `comparison.valid` explains whether a visual pass/fail decision is meaningful.
 

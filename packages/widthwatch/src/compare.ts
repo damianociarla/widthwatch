@@ -93,7 +93,7 @@ function validateCompatibility(
   if (changedEnvironment.length) {
     errors.push({ code: "environment-mismatch", message: `Rendering environments differ in: ${changedEnvironment.join(", ")}.` });
   }
-  const captureKeys = ["mode", "screenshot", "scrollSweep", "reloadPerWidth", "pageReady", "readinessKey"] as const;
+  const captureKeys = ["mode", "screenshot", "imageFormat", "scrollSweep", "reloadPerWidth", "pageReady", "readinessKey"] as const;
   const changedCapture = !baseline.capture || !candidate.capture ? captureKeys : captureKeys.filter((key) => baseline.capture[key] !== candidate.capture[key]);
   if (changedCapture.length) {
     errors.push({ code: "capture-mismatch", message: `Capture settings differ or are missing in: ${changedCapture.join(", ")}.` });

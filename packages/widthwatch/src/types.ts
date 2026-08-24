@@ -74,6 +74,7 @@ export interface WidthWatchReport {
   capture: {
     mode: "layout" | "visual";
     screenshot: "viewport" | "full-page";
+    imageFormat?: "png" | "jpeg";
     scrollSweep: boolean;
     reloadPerWidth: boolean;
     pageReady: boolean;
@@ -143,6 +144,8 @@ export interface ScanOptions {
   readinessKey?: string;
   pageReadyTimeoutMs?: number;
   screenshot?: "viewport" | "full-page";
+  imageFormat?: "png" | "jpeg";
+  imageQuality?: number;
   headless?: boolean;
   blockResourceTypes?: string[];
   hideSelectors?: string[];

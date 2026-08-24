@@ -89,8 +89,8 @@ async function drain(): Promise<void> {
     const job = queue.shift()!; job.status = "running";
     try {
       job.report = await scanResponsive(job.url, {
-        mode: "layout", minWidth: 320, maxWidth: 1440, viewportHeight: 800, initialStep: 224, minStep: 24, maxSamples: 8,
-        maxElements: 350, timeoutMs: 15_000, settleMs: 80, maxRequests: 250, blockResourceTypes: ["media", "websocket"],
+        mode: "layout", imageFormat: "jpeg", imageQuality: 70, minWidth: 320, maxWidth: 1440, viewportHeight: 800, initialStep: 400, minStep: 32, maxSamples: 5,
+        maxElements: 250, maxDomNodes: 2_500, timeoutMs: 15_000, settleMs: 50, maxRequests: 200, blockResourceTypes: ["media", "websocket"],
         proxyServer: proxy.url, allowedUrl: async (url) => resolvePublicTarget(url).then(() => true, () => false),
       });
       job.reportHtml = generateHtmlReport(job.report);

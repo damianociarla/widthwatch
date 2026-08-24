@@ -23,6 +23,7 @@ test("invalid numeric options fail before launching a browser", async () => {
   await assert.rejects(scanResponsive("https://example.com", { viewportHeight: 0 }), /viewportHeight/);
   await assert.rejects(scanResponsive("https://example.com", { exactWidths: [320, 320] }), /duplicates/);
   await assert.rejects(scanResponsive("https://example.com", { maxElements: 20, maxDomNodes: 10 }), /maxDomNodes/);
+  await assert.rejects(scanResponsive("https://example.com", { imageQuality: 0 }), /imageQuality/);
   await assert.rejects(scanResponsive("https://example.com", { maxScrollSteps: 0 }), /maxScrollSteps/);
   await assert.rejects(scanResponsive("https://example.com", { pageReadyTimeoutMs: Number.NaN }), /pageReadyTimeoutMs/);
   await assert.rejects(scanResponsive("https://example.com", { pageReady: async () => {} }), /readinessKey/);
@@ -33,6 +34,13 @@ test("scanAtWidths captures exactly the requested deterministic schedule", async
   const result = await scanAtWidths(url, [777, 321], { viewportHeight: 480, settleMs: 0 });
   assert.deepEqual(result.frames.map((frame) => frame.width), [321, 777]);
   assert.deepEqual(result.range, { min: 321, max: 777, height: 480 });
+});
+
+test("standalone scans can use bounded JPEG evidence", async (context) => {
+  const url = await fixture(context, (_request, response) => html(response, "<main>jpeg evidence</main>"));
+  const result = await scanAtWidths(url, [320], { mode: "layout", imageFormat: "jpeg", imageQuality: 60, viewportHeight: 480, settleMs: 0 });
+  assert.equal(result.capture.imageFormat, "jpeg");
+  assert.match(result.frames[0].screenshot, /^data:image\/jpeg;base64,/);
 });
 
 test("visual mode scrolls through lazy content and captures the full page", async (context) => {

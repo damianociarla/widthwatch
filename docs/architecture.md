@@ -22,7 +22,7 @@ Explore scans choose widths adaptively. CI comparisons are deterministic: the ba
 
 `widthwatch init` creates a TypeScript config and a reusable GitHub Actions workflow. The workflow accepts a candidate preview URL, runs with read-only repository permissions and uploads the standalone HTML as an artifact. It intentionally avoids automatic writable PR comments and `pull_request_target`; a future authenticated GitHub App can add comments without weakening fork safety.
 
-The local engine has two explicit capture modes. `visual` waits for fonts, runs a bounded scroll sweep to activate lazy loading and IntersectionObservers, returns to the top and records a full-page image. `layout` avoids the sweep and records only the viewport for fast geometry exploration. Callers can reload at every width and supply a bounded Playwright `pageReady` hook plus a versioned `readinessKey` for application-specific readiness. The hosted demo deliberately pins `layout` mode to preserve its public time and compute budgets.
+The local engine has two explicit capture modes. `visual` waits for fonts, runs a bounded scroll sweep to activate lazy loading and IntersectionObservers, returns to the top and records a full-page image. `layout` avoids the sweep and records only the viewport for fast geometry exploration. Callers can reload at every width and supply a bounded Playwright `pageReady` hook plus a versioned `readinessKey` for application-specific readiness. The hosted demo deliberately pins `layout` mode, five adaptive widths and compact JPEG evidence to preserve its public time and compute budgets; CI keeps lossless PNG evidence.
 
 ## Public request path
 
@@ -38,4 +38,4 @@ For a paid or multi-tenant product, replace the in-memory queue with DynamoDB + 
 
 ## Release order
 
-A `v*` tag validates the exact artifact, deploys the bounded API, publishes npm through trusted OIDC publishing, deploys GitHub Pages, and creates the GitHub Release. AWS access uses GitHub OIDC and short-lived credentials. Production is a protected GitHub environment.
+A `v*` tag validates the exact artifact, deploys the bounded API, publishes npm through trusted OIDC publishing, and creates the GitHub Release. Pushes to `main` deploy GitHub Pages, keeping Pages environment protection independent from release tags. AWS access uses GitHub OIDC and short-lived credentials. Production is a protected GitHub environment.
