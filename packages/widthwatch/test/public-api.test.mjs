@@ -19,4 +19,5 @@ test("comparison reporter exposes invalid state and baseline candidate diff cont
   assert.match(html, /data-view="baseline"/);
   assert.match(html, /data-view="candidate"/);
   assert.match(html, /data-view="diff"/);
+  assert.match(html, /First regression|comparison invalid/);
 });

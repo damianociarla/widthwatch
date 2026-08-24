@@ -1,6 +1,7 @@
 import { chromium, type BrowserContext, type Page } from "playwright";
 import type { ElementRef, LayoutFrame, ResponsiveIssue, ScanOptions, WidthTransition, WidthWatchReport } from "./types.js";
 import { PACKAGE_VERSION } from "./version.js";
+import { groupIssuesByRange } from "./issue-ranges.js";
 
 interface ProbeResult {
   document: { width: number; height: number };
@@ -99,6 +100,7 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
     if (!config.reloadPerWidth) await navigate(page, normalizedUrl, config);
 
     const frames = new Map<number, LayoutFrame>();
+    const refinementsByBand = new Map<number, number>();
     const initialWidths = config.exactWidths ?? seedWidths(config.minWidth, config.maxWidth, config.initialStep);
     for (const width of initialWidths) {
       if (!config.exactWidths && frames.size >= config.maxSamples) break;
@@ -107,7 +109,7 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
 
     while (!config.exactWidths && frames.size < config.maxSamples) {
       const widths = [...frames.keys()].sort((a, b) => a - b);
-      const candidates: Array<{ width: number; priority: number }> = [];
+      const candidates: Array<{ width: number; priority: number; band: number; span: number }> = [];
       for (let index = 0; index < widths.length - 1; index += 1) {
         const leftWidth = widths[index];
         const rightWidth = widths[index + 1];
@@ -115,11 +117,19 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
         const left = frames.get(leftWidth)!;
         const right = frames.get(rightWidth)!;
         const changed = left.layoutSignature !== right.layoutSignature || issueFingerprint(left) !== issueFingerprint(right);
-        if (changed) candidates.push({ width: Math.floor((leftWidth + rightWidth) / 2), priority: transitionScore(left, right) });
+        if (changed) {
+          const width = Math.floor((leftWidth + rightWidth) / 2);
+          const band = Math.min(Math.floor((width - config.minWidth) / config.initialStep), Math.floor((config.maxWidth - config.minWidth) / config.initialStep));
+          const refinements = refinementsByBand.get(band) ?? 0;
+          const span = rightWidth - leftWidth;
+          const priority = transitionScore(left, right) / (1 + refinements) + Math.min(6, span / config.initialStep * 3);
+          candidates.push({ width, priority, band, span });
+        }
       }
-      const next = candidates.sort((a, b) => b.priority - a.priority)[0];
+      const next = candidates.sort((a, b) => b.priority - a.priority || b.span - a.span || a.width - b.width)[0];
       if (!next || frames.has(next.width)) break;
       frames.set(next.width, await captureFrame(page, normalizedUrl, next.width, config));
+      refinementsByBand.set(next.band, (refinementsByBand.get(next.band) ?? 0) + 1);
     }
 
     const orderedFrames = [...frames.values()].sort((a, b) => a.width - b.width);
@@ -144,6 +154,7 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
       },
       frames: orderedFrames,
       transitions,
+      issueRanges: groupIssuesByRange(orderedFrames.map((frame) => frame.width), issues),
       summary: {
         errors: issues.filter((issue) => issue.severity === "error").length,
         warnings: issues.filter((issue) => issue.severity === "warning").length,
@@ -354,7 +365,7 @@ function probePage(input: { width: number; maxElements: number; maxDomNodes: num
     }
   }
 
-  const signatureSource = snaps.slice(0, 120).map((snap) => `${snap.selector}:${Math.round(snap.rect.x / 4)},${Math.round(snap.rect.y / 4)},${Math.round(snap.rect.width / 4)},${Math.round(snap.rect.height / 4)}`).join("|");
+  const signatureSource = snaps.slice(0, 120).map((snap) => `${snap.selector}:${Math.round(snap.rect.x / input.width * 20)},${Math.round(snap.rect.y / 8)},${Math.round(snap.rect.width / input.width * 20)},${Math.round(snap.rect.height / 8)}`).join("|");
   let hash = 2166136261;
   for (let index = 0; index < signatureSource.length; index += 1) hash = Math.imul(hash ^ signatureSource.charCodeAt(index), 16777619);
   return { document: { width: documentWidth, height: documentHeight }, signature: (hash >>> 0).toString(36), issues };
@@ -380,7 +391,7 @@ function buildTransitions(frames: LayoutFrame[]): WidthTransition[] {
   return frames.slice(0, -1).map((frame, index) => {
     const next = frames[index + 1]!;
     const score = transitionScore(frame, next);
-    return { from: frame.width, to: next.width, changed: frame.layoutSignature !== next.layoutSignature, score: Math.round(score * 10) / 10 };
+    return { from: frame.width, to: next.width, changed: frame.layoutSignature !== next.layoutSignature || issueFingerprint(frame) !== issueFingerprint(next), score: Math.round(score * 10) / 10 };
   });
 }
 

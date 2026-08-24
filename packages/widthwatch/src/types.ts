@@ -34,6 +34,18 @@ export interface ResponsiveIssue {
   metrics?: Record<string, number>;
 }
 
+export interface ResponsiveIssueRange {
+  id: string;
+  kind: IssueKind;
+  severity: Severity;
+  from: number;
+  to: number;
+  sampledWidths: number[];
+  occurrences: number;
+  message: string;
+  elements: ElementRef[];
+}
+
 export interface LayoutFrame {
   width: number;
   height: number;
@@ -69,6 +81,7 @@ export interface WidthWatchReport {
   };
   frames: LayoutFrame[];
   transitions: WidthTransition[];
+  issueRanges?: ResponsiveIssueRange[];
   summary: { errors: number; warnings: number; info: number; sampledWidths: number };
 }
 
@@ -102,6 +115,9 @@ export interface ComparisonReport {
   candidate: WidthWatchReport;
   diffs: VisualDiff[];
   regressions: ResponsiveIssue[];
+  resolved?: ResponsiveIssue[];
+  regressionRanges?: ResponsiveIssueRange[];
+  settings?: { threshold: number; maxDiffRatio: number };
   valid: boolean;
   validationErrors: ComparisonError[];
   passed: boolean;
@@ -139,4 +155,15 @@ export interface CompareOptions {
   threshold?: number;
   maxDiffRatio?: number;
   includeDiffImages?: boolean;
+}
+
+export interface WidthWatchConfig {
+  version: 1;
+  url?: string;
+  output?: string;
+  json?: string;
+  baseline?: string;
+  failOnRegression?: boolean;
+  scan?: ScanOptions;
+  compare?: CompareOptions;
 }

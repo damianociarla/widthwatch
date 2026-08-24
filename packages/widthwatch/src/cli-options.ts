@@ -1,5 +1,7 @@
 export interface ParsedCliOptions {
+  command: "scan" | "init";
   url?: string;
+  config?: string;
   output?: string;
   json?: string;
   baseline?: string;
@@ -14,7 +16,8 @@ export interface ParsedCliOptions {
   version: boolean;
 }
 
-const valueOptions: ReadonlyMap<string, "output" | "json" | "baseline" | "minWidth" | "maxWidth" | "maxSamples"> = new Map([
+const valueOptions: ReadonlyMap<string, "config" | "output" | "json" | "baseline" | "minWidth" | "maxWidth" | "maxSamples"> = new Map([
+  ["--config", "config"],
   ["--output", "output"],
   ["--json", "json"],
   ["--baseline", "baseline"],
@@ -25,6 +28,7 @@ const valueOptions: ReadonlyMap<string, "output" | "json" | "baseline" | "minWid
 
 export function parseCliOptions(args: string[]): ParsedCliOptions {
   const parsed: ParsedCliOptions = {
+    command: args[0] === "init" ? "init" : "scan",
     fullPage: false,
     layoutOnly: false,
     reloadPerWidth: false,
@@ -32,7 +36,7 @@ export function parseCliOptions(args: string[]): ParsedCliOptions {
     help: false,
     version: false,
   };
-  for (let index = 0; index < args.length; index += 1) {
+  for (let index = parsed.command === "init" ? 1 : 0; index < args.length; index += 1) {
     const argument = args[index]!;
     if (argument === "--full-page") { parsed.fullPage = true; continue; }
     if (argument === "--layout-only") { parsed.layoutOnly = true; continue; }
@@ -50,6 +54,7 @@ export function parseCliOptions(args: string[]): ParsedCliOptions {
       continue;
     }
     if (argument.startsWith("-")) throw new Error(`Unknown option: ${argument}`);
+    if (parsed.command === "init") throw new Error(`Unknown init argument: ${argument}`);
     if (parsed.url) throw new Error("Only one URL can be scanned at a time.");
     parsed.url = argument;
   }

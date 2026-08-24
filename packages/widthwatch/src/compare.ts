@@ -1,6 +1,7 @@
 import pixelmatch from "pixelmatch";
 import { PNG } from "pngjs";
 import type { CompareOptions, ComparisonError, ComparisonReport, ResponsiveIssue, VisualDiff, WidthWatchReport } from "./types.js";
+import { groupIssuesByRange } from "./issue-ranges.js";
 
 export function compareReports(baseline: WidthWatchReport, candidate: WidthWatchReport, options: CompareOptions = {}): ComparisonReport {
   const threshold = options.threshold ?? 0.2;
@@ -56,11 +57,25 @@ export function compareReports(baseline: WidthWatchReport, candidate: WidthWatch
   }
 
   const baselineIssues = new Set(baseline.frames.flatMap((frame) => frame.issues.map(issueKey)));
+  const candidateIssues = new Set(candidate.frames.flatMap((frame) => frame.issues.map(issueKey)));
   for (const issue of candidate.frames.flatMap((frame) => frame.issues)) {
     if (!baselineIssues.has(issueKey(issue))) regressions.push(issue);
   }
+  const resolved = baseline.frames.flatMap((frame) => frame.issues).filter((issue) => !candidateIssues.has(issueKey(issue)));
   const valid = validationErrors.length === 0;
-  return { version: 1, baseline, candidate, diffs, regressions, valid, validationErrors, passed: valid && regressions.every((issue) => issue.severity !== "error") };
+  return {
+    version: 1,
+    baseline,
+    candidate,
+    diffs,
+    regressions,
+    resolved,
+    regressionRanges: groupIssuesByRange(candidate.frames.map((frame) => frame.width), regressions),
+    settings: { threshold, maxDiffRatio },
+    valid,
+    validationErrors,
+    passed: valid && regressions.every((issue) => issue.severity !== "error"),
+  };
 }
 
 function validateCompatibility(

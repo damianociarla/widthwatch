@@ -11,6 +11,8 @@ export default defineConfig({
       input: {
         main: resolve(root, "index.html"),
         docs: resolve(root, "docs.html"),
+        proofBaseline: resolve(root, "proof-baseline.html"),
+        proofCandidate: resolve(root, "proof-candidate.html"),
       },
     },
   },

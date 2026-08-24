@@ -4,10 +4,11 @@ import { generateHtmlReport, scanResponsive, type WidthWatchReport } from "width
 import { startPinnedEgressProxy } from "./egress-proxy.js";
 import { assertPublicUrl, resolvePublicTarget, UnsafeUrlError } from "./network-policy.js";
 import { holdConnectionUntilSettled, scanStatusPayload, type HostedScanStatus } from "./scan-response.js";
+import { ReportStore } from "./report-store.js";
 import { consumeRateLimits, SlidingWindowLimiter } from "./security.js";
 import { API_VERSION } from "./version.js";
 
-type Job = { id: string; url: string; createdAt: number; status: HostedScanStatus; report?: WidthWatchReport; error?: string };
+type Job = { id: string; url: string; createdAt: number; status: HostedScanStatus; report?: WidthWatchReport; reportHtml?: string; error?: string };
 const jobs = new Map<string, Job>();
 const queue: Job[] = [];
 const clientLimit = new SlidingWindowLimiter(Number(process.env.RATE_LIMIT_PER_10_MINUTES ?? 2), 600_000);
@@ -16,6 +17,7 @@ const globalLimit = new SlidingWindowLimiter(Number(process.env.GLOBAL_RATE_LIMI
 const allowedOrigins = new Set((process.env.ALLOWED_ORIGINS ?? "https://damianociarla.github.io,http://localhost:5173").split(","));
 const originToken = process.env.ORIGIN_VERIFY_TOKEN ?? "";
 const proxy = await startPinnedEgressProxy();
+const reportStore = new ReportStore();
 let running = false;
 
 const server = createServer(async (request, response) => {
@@ -61,16 +63,24 @@ function getScan(id: string, response: ServerResponse): void {
   json(response, 200, scanStatusPayload(job));
 }
 
-function getReport(id: string, response: ServerResponse): void {
+async function getReport(id: string, response: ServerResponse): Promise<void> {
   const job = jobs.get(id);
-  if (!job?.report || job.status !== "complete") return json(response, 404, { error: "not_found" });
-  response.writeHead(200, {
+  try {
+    const memoryHtml = job?.status === "complete"
+      ? job.reportHtml ?? (job.report ? generateHtmlReport(job.report) : undefined)
+      : undefined;
+    const html = memoryHtml ?? await reportStore.get(id);
+    if (!html) return json(response, 404, { error: "not_found" });
+    response.writeHead(200, {
     "content-type": "text/html; charset=utf-8",
     "cache-control": "private, max-age=60",
     "content-security-policy": "default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
     "referrer-policy": "no-referrer",
     "x-content-type-options": "nosniff",
-  }).end(generateHtmlReport(job.report));
+    }).end(html);
+  } catch {
+    json(response, 503, { error: "report_unavailable" });
+  }
 }
 
 async function drain(): Promise<void> {
@@ -83,6 +93,8 @@ async function drain(): Promise<void> {
         maxElements: 350, timeoutMs: 15_000, settleMs: 80, maxRequests: 250, blockResourceTypes: ["media", "websocket"],
         proxyServer: proxy.url, allowedUrl: async (url) => resolvePublicTarget(url).then(() => true, () => false),
       });
+      job.reportHtml = generateHtmlReport(job.report);
+      await reportStore.put(job.id, job.reportHtml);
       job.status = "complete";
     } catch { job.status = "failed"; job.error = "The bounded scan could not complete."; }
   }

@@ -3,13 +3,36 @@ Description: Bounded WidthWatch App Runner API
 Parameters:
   ImageIdentifier: { Type: String }
   EcrAccessRoleArn: { Type: String }
+  InstanceRoleArn: { Type: String, Default: "" }
   OriginVerifyToken: { Type: String, NoEcho: true }
   AllowedOrigins: { Type: String, Default: "https://damianociarla.github.io" }
   BudgetAlertEmail: { Type: String, Default: "" }
   MonthlyBudgetUsd: { Type: Number, Default: 20 }
 Conditions:
   HasBudgetAlertEmail: !Not [!Equals [!Ref BudgetAlertEmail, ""]]
+  HasReportPersistence: !Not [!Equals [!Ref InstanceRoleArn, ""]]
 Resources:
+  ReportBucket:
+    Type: AWS::S3::Bucket
+    Condition: HasReportPersistence
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub "widthwatch-reports-${AWS::AccountId}-${AWS::Region}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpirePublicDemoReports
+            Status: Enabled
+            Prefix: reports/
+            ExpirationInDays: 7
   Scaling:
     Type: AWS::AppRunner::AutoScalingConfiguration
     Properties:
@@ -23,7 +46,10 @@ Resources:
       ServiceName: widthwatch-api
       AutoScalingConfigurationArn: !GetAtt Scaling.AutoScalingConfigurationArn
       HealthCheckConfiguration: { Path: /health, Protocol: HTTP, Interval: 10, Timeout: 5, HealthyThreshold: 1, UnhealthyThreshold: 5 }
-      InstanceConfiguration: { Cpu: "1 vCPU", Memory: "2 GB" }
+      InstanceConfiguration:
+        Cpu: "1 vCPU"
+        Memory: "2 GB"
+        InstanceRoleArn: !If [HasReportPersistence, !Ref InstanceRoleArn, !Ref "AWS::NoValue"]
       SourceConfiguration:
         AutoDeploymentsEnabled: false
         AuthenticationConfiguration: { AccessRoleArn: !Ref EcrAccessRoleArn }
@@ -38,6 +64,10 @@ Resources:
               - { Name: RATE_LIMIT_PER_10_MINUTES, Value: "2" }
               - { Name: TARGET_RATE_LIMIT_PER_HOUR, Value: "2" }
               - { Name: GLOBAL_RATE_LIMIT_PER_HOUR, Value: "30" }
+              - !If
+                - HasReportPersistence
+                - { Name: REPORT_BUCKET, Value: !Ref ReportBucket }
+                - !Ref "AWS::NoValue"
   MonthlyCostBudget:
     Type: AWS::Budgets::Budget
     Condition: HasBudgetAlertEmail
@@ -55,3 +85,6 @@ Resources:
 Outputs:
   ServiceUrl: { Value: !GetAtt Service.ServiceUrl }
   ServiceArn: { Value: !GetAtt Service.ServiceArn }
+  ReportBucketName:
+    Condition: HasReportPersistence
+    Value: !Ref ReportBucket

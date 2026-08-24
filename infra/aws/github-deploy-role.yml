@@ -18,35 +18,20 @@ Parameters:
     Type: String
     Default: production
     AllowedPattern: "[A-Za-z0-9._-]+"
+  RoleNameSuffix:
+    Type: String
+    Default: ""
+    AllowedPattern: "^$|^-[A-Za-z0-9]+$"
+    Description: Optional suffix for parallel bootstrap generations during IAM recovery
   ExistingGitHubOidcProviderArn:
     Type: String
     Description: Account-level GitHub Actions OIDC provider ARN
 
 Resources:
-  ApplicationRoleBoundary:
-    Type: AWS::IAM::ManagedPolicy
-    Properties:
-      ManagedPolicyName: widthwatch-application-role-boundary
-      Description: Maximum permissions available to the WidthWatch App Runner image pull role
-      PolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Action: ecr:GetAuthorizationToken
-            Resource: "*"
-          - Effect: Allow
-            Action:
-              - ecr:GetDownloadUrlForLayer
-              - ecr:BatchGetImage
-              - ecr:DescribeImages
-              - ecr:BatchCheckLayerAvailability
-            Resource: !Sub "arn:${AWS::Partition}:ecr:eu-west-1:${AWS::AccountId}:repository/widthwatch-api"
-
   AppRunnerEcrAccessRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: widthwatch-apprunner-ecr-access
-      PermissionsBoundary: !Ref ApplicationRoleBoundary
+      RoleName: !Sub "widthwatch-apprunner-ecr-access${RoleNameSuffix}"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -69,10 +54,29 @@ Resources:
                   - ecr:BatchCheckLayerAvailability
                 Resource: !Sub "arn:${AWS::Partition}:ecr:eu-west-1:${AWS::AccountId}:repository/widthwatch-api"
 
+  AppRunnerInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "widthwatch-apprunner-instance${RoleNameSuffix}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: tasks.apprunner.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: WidthWatchReportObjects
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [s3:GetObject, s3:PutObject]
+                Resource: !Sub "arn:${AWS::Partition}:s3:::widthwatch-reports-${AWS::AccountId}-eu-west-1/reports/*"
+
   CloudFormationExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: widthwatch-cloudformation-execution
+      RoleName: !Sub "widthwatch-cloudformation-execution${RoleNameSuffix}"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -86,7 +90,9 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: [iam:GetRole, iam:PassRole]
-                Resource: !GetAtt AppRunnerEcrAccessRole.Arn
+                Resource:
+                  - !GetAtt AppRunnerEcrAccessRole.Arn
+                  - !GetAtt AppRunnerInstanceRole.Arn
               - Effect: Allow
                 Action: iam:CreateServiceLinkedRole
                 Resource: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/apprunner.amazonaws.com/AWSServiceRoleForAppRunner"
@@ -141,11 +147,27 @@ Resources:
               - Effect: Allow
                 Action: [budgets:ModifyBudget, budgets:ViewBudget]
                 Resource: !Sub "arn:${AWS::Partition}:budgets::${AWS::AccountId}:budget/widthwatch-monthly-cost"
+              - Effect: Allow
+                Action:
+                  - s3:CreateBucket
+                  - s3:DeleteBucket
+                  - s3:GetBucketAcl
+                  - s3:GetBucketEncryption
+                  - s3:GetBucketLifecycleConfiguration
+                  - s3:GetBucketLocation
+                  - s3:GetBucketPolicy
+                  - s3:GetBucketPublicAccessBlock
+                  - s3:GetBucketTagging
+                  - s3:PutBucketEncryption
+                  - s3:PutBucketLifecycleConfiguration
+                  - s3:PutBucketPublicAccessBlock
+                  - s3:PutBucketTagging
+                Resource: !Sub "arn:${AWS::Partition}:s3:::widthwatch-reports-${AWS::AccountId}-eu-west-1"
 
   GitHubDeployRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: widthwatch-github-deploy
+      RoleName: !Sub "widthwatch-github-deploy${RoleNameSuffix}"
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -198,3 +220,5 @@ Outputs:
     Value: !GetAtt CloudFormationExecutionRole.Arn
   ApplicationRoleArn:
     Value: !GetAtt AppRunnerEcrAccessRole.Arn
+  AppRunnerInstanceRoleArn:
+    Value: !GetAtt AppRunnerInstanceRole.Arn

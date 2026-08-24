@@ -18,5 +18,5 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run pack:check
+      - run: npm run pack:smoke
       - run: npm audit --audit-level=high
-

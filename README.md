@@ -12,18 +12,26 @@ npx widthwatch https://example.com \
 
 For a pinned CI dependency, use `npm install --save-dev widthwatch`. If Chromium is not already available in the runner, install the matching browser once with `npx playwright install chromium`.
 
+Initialize a versioned TypeScript config and a read-only reusable GitHub Actions workflow:
+
+```bash
+npx widthwatch init
+```
+
 The engine returns versioned TypeScript objects, renders a portable interactive HTML report, and compares a candidate page with a baseline at matching widths. Its adaptive sampler discovers where geometry changes and spends the screenshot budget around those intervals instead of pretending that mobile/tablet/desktop are the whole responsive surface.
 
-## What exists in v0.1
+## What exists in v0.2
 
 - adaptive 320–1440px width timeline;
 - document and element overflow detection;
 - clipped-text and material leaf-overlap detection;
 - layout discontinuity signals;
+- issue ranges such as `742–811px` instead of disconnected frame findings;
 - full-page visual mode with bounded scroll sweep and lazy-content activation;
 - optional reload-per-width and application-specific Playwright readiness hook;
 - PNG pixel comparison with candidate/baseline regression output;
 - CLI, TypeScript API and native standalone HTML reporter;
+- `widthwatch.config.ts` plus a generated reusable GitHub workflow;
 - product website, documentation and bounded public-scanner UI;
 - shareable interactive online reports for completed public scans;
 - protected AWS App Runner API with DNS-pinned egress, quotas and a one-instance hard cap;
@@ -77,6 +85,10 @@ Baseline and candidate must run in the same pinned browser container. Browser re
 
 The CLI uses correctness-first visual capture and reloads each width. For a fast diagnostic probe that only inspects the viewport, use `--layout-only`; add `--reload-per-width` when a layout-only application calculates responsive state only during startup.
 
+The generated workflow is deliberately read-only and uploads the portable report as an artifact. It accepts a deployed preview URL through `workflow_call` or manual dispatch, and never uses `pull_request_target`. Connect it to the step that already deploys your application preview.
+
+See the [reproducible 742–811px regression](https://damianociarla.github.io/widthwatch/proof.html) for a real baseline/candidate/diff report generated from the committed fixtures.
+
 ## Repository
 
 ```text
@@ -108,7 +120,7 @@ npm start --workspace @widthwatch/api
 
 ## Public demo limits
 
-The hosted surface is intentionally not the local package in the cloud. It accepts one credential-free public page, uses 8 adaptive widths, blocks media, caps navigation at 15 seconds and 250 requests, admits at most three queued jobs, runs one browser, and exposes a shareable interactive report for 30 minutes. The admission request streams lightweight heartbeats while the browser works so App Runner does not throttle detached CPU, while status polling returns lightweight metadata rather than embedded screenshots. Separate client, target, global, CloudFront/WAF and compute limits prevent arbitrary scale-out. The local package keeps its larger 24-sample default for CI and detailed analysis.
+The hosted surface is intentionally not the local package in the cloud. It accepts one credential-free public page, uses 8 adaptive widths, blocks media, caps navigation at 15 seconds and 250 requests, admits at most three queued jobs, and runs one browser. Job status remains in memory for 30 minutes; when `AWS_INSTANCE_ROLE_ARN` is configured, completed HTML reports are stored in a private encrypted S3 bucket and expire automatically after 7 days. The admission request streams lightweight heartbeats while the browser works so App Runner does not throttle detached CPU, while status polling returns lightweight metadata rather than embedded screenshots. Separate client, target, global, CloudFront/WAF and compute limits prevent arbitrary scale-out. The local package keeps its larger 24-sample default for CI and detailed analysis.
 
 See [architecture](docs/architecture.md), [OpenAPI](docs/openapi.yml), and [security policy](SECURITY.md).
 
@@ -116,7 +128,7 @@ See [architecture](docs/architecture.md), [OpenAPI](docs/openapi.yml), and [secu
 
 1. Deploy `infra/aws/github-deploy-role.yml` once, reusing the account-level GitHub OIDC provider.
 2. Configure protected GitHub environment `production`.
-3. Add repository variables `AWS_ACCOUNT_ID`, `AWS_DEPLOY_ROLE_ARN`, `AWS_CLOUDFORMATION_ROLE_ARN`, `AWS_ECR_ACCESS_ROLE_ARN`, and `VITE_API_URL`.
+3. Add repository variables `AWS_ACCOUNT_ID`, `AWS_DEPLOY_ROLE_ARN`, `AWS_CLOUDFORMATION_ROLE_ARN`, `AWS_ECR_ACCESS_ROLE_ARN`, `AWS_INSTANCE_ROLE_ARN`, and `VITE_API_URL`.
 4. Add `WIDTHWATCH_ORIGIN_VERIFY_TOKEN` as an environment secret.
 5. Configure npm trusted publishing for repository `damianociarla/widthwatch`, workflow `release.yml`, environment `production`.
 6. Enable GitHub Pages with GitHub Actions as its source.

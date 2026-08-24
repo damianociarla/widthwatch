@@ -12,6 +12,10 @@ test("landing exposes the scanner, docs and published package command", async ()
   assert.match(html, /Open interactive report/);
   assert.doesNotMatch(html, /Watch every width/);
   assert.match(html, /rel="canonical"/);
+  assert.match(html, /application\/ld\+json/);
+  assert.match(html, /id="navToggle"/);
+  assert.match(html, /Reproducible evidence/);
+  assert.match(html, /href="\.\/proof\.html"/);
 });
 
 test("production build uses the GitHub Pages repository base path", async () => {
@@ -23,4 +27,13 @@ test("production artifact includes the documentation entry", async () => {
   const html = await readFile(new URL("../dist/docs.html", import.meta.url), "utf8");
   assert.match(html, /WidthWatch documentation/);
   assert.match(html, /What it detects/);
+});
+
+test("production artifact includes real proof fixtures and comparison report", async () => {
+  const proof = await readFile(new URL("../dist/proof.html", import.meta.url), "utf8");
+  const candidate = await readFile(new URL("../dist/proof-candidate.html", import.meta.url), "utf8");
+  assert.match(proof, /First regression/);
+  assert.match(proof, /742—811px/);
+  assert.match(proof, /clipped-text/);
+  assert.match(candidate, /min-width:742px/);
 });

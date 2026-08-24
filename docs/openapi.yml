@@ -1,5 +1,5 @@
 openapi: 3.1.0
-info: { title: WidthWatch hosted scanner, version: 0.1.0 }
+info: { title: WidthWatch hosted scanner, version: 0.2.0 }
 servers: [{ url: "https://api.example.com" }]
 paths:
   /health:
@@ -38,4 +38,4 @@ paths:
         "200":
           description: Interactive standalone HTML report
           content: { text/html: { schema: { type: string } } }
-        "404": { description: Unknown, incomplete, or expired report }
+        "404": { description: Unknown, incomplete, or report older than the seven-day public retention window }

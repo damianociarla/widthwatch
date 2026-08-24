@@ -79,3 +79,26 @@ test("maxElements is applied after invisible nodes are filtered", async (context
   const result = await scanAtWidths(url, [320], { mode: "layout", maxElements: 1, maxDomNodes: 20, settleMs: 0 });
   assert.ok(result.frames[0].issues.some((issue) => issue.kind === "clipped-text" && issue.elements[0]?.selector === "#important"));
 });
+
+test("scanner groups the same finding across consecutive sampled widths", async (context) => {
+  const url = await fixture(context, (_request, response) => html(response, `
+    <style>@media(min-width:450px){#clipped{display:none}}</style>
+    <p id="clipped" style="width:30px;white-space:nowrap;overflow:hidden">important clipped content</p>
+  `));
+  const result = await scanAtWidths(url, [320, 400, 480], { mode: "layout", viewportHeight: 480, settleMs: 0 });
+  const range = result.issueRanges.find((item) => item.kind === "clipped-text" && item.elements[0]?.selector === "#clipped");
+  assert.deepEqual([range.from, range.to, range.occurrences], [320, 400, 2]);
+});
+
+test("adaptive refinement spends budget across separate transition bands", async (context) => {
+  const url = await fixture(context, (_request, response) => html(response, `
+    <style>
+      #first,#second{width:100px;height:20px}
+      @media(min-width:500px){#first{transform:translateY(180px)}}
+      @media(min-width:900px){#second{transform:translateY(240px)}}
+    </style>
+    <div id="first">first</div><div id="second">second</div>
+  `));
+  const result = await scanResponsive(url, { mode: "layout", minWidth: 320, maxWidth: 1120, initialStep: 400, minStep: 8, maxSamples: 5, viewportHeight: 480, settleMs: 0 });
+  assert.ok(result.frames.some((frame) => frame.width > 720 && frame.width < 1120), `Expected refinement near the second transition, got ${result.frames.map((frame) => frame.width).join(", ")}`);
+});

@@ -12,20 +12,22 @@
     <meta property="og:title" content="WidthWatch · Catch what fixed breakpoints miss" />
     <meta property="og:description" content="Adaptive responsive regression testing with typed evidence and portable reports." />
     <meta name="twitter:card" content="summary" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"WidthWatch","applicationCategory":"DeveloperApplication","operatingSystem":"Node.js","softwareVersion":"0.1","url":"https://damianociarla.github.io/widthwatch/","downloadUrl":"https://www.npmjs.com/package/widthwatch","license":"https://opensource.org/licenses/MIT"}</script>
     <title>WidthWatch · Adaptive responsive regression testing</title>
   </head>
   <body>
     <a class="skip" href="#main">Skip to content</a>
     <header class="site-header">
       <a class="brand" href="#top" aria-label="WidthWatch home">width<span>watch</span></a>
-      <nav aria-label="Primary navigation">
-        <a href="#demo">Demo</a><a href="#engine">Engine</a><a href="./docs.html">Docs</a><a href="https://github.com/damianociarla/widthwatch">GitHub ↗</a>
+      <button class="nav-toggle" id="navToggle" type="button" aria-expanded="false" aria-controls="primaryNav">Menu</button>
+      <nav id="primaryNav" aria-label="Primary navigation">
+        <a href="#demo">Demo</a><a href="#engine">Engine</a><a href="#proof">Proof</a><a href="./docs.html">Docs</a><a href="https://github.com/damianociarla/widthwatch">GitHub ↗</a>
       </nav>
     </header>
     <main id="main">
       <section class="hero" id="top">
         <div class="hero-copy reveal">
-          <p class="eyebrow">Open source · v0.1 on npm</p>
+          <p class="eyebrow">Open source · v0.2 on npm</p>
           <h1>Find the width<br>where it <em>breaks.</em></h1>
           <p class="lede">WidthWatch adaptively samples the space between mobile and desktop, then turns layout discontinuities into evidence your pull request can act on.</p>
           <button class="command" data-widthwatch-ignore data-copy="npx widthwatch https://your-site.com" type="button"><code>npx widthwatch https://your-site.com</code><span>Copy</span></button>
@@ -59,6 +61,11 @@
           <div class="viewport-demo"><div class="fake-nav"><i></i><i></i><i></i></div><div class="fake-title"></div><div class="fake-copy"></div><div class="fake-button"></div><div class="collision">clipped text</div></div>
           <div class="ui-finding"><span>853px · clipped-text</span><b>Heading exceeds its visible container.</b><code>main &gt; section:nth-of-type(2) &gt; h2</code></div>
         </div>
+      </section>
+
+      <section class="proof" id="proof">
+        <div class="proof-copy reveal"><p class="eyebrow">Reproducible evidence</p><h2>A regression,<br>not a mockup.</h2><p>The same fixture is captured as baseline and candidate at five exact widths. The candidate loses its primary action only inside the measured interval.</p><a class="proof-link" href="./proof.html">Open the real comparison report <span>↗</span></a></div>
+        <div class="proof-trace" aria-label="Demonstrated regression from 742 to 811 pixels"><div class="proof-axis"><span>720</span><span>742</span><span>768</span><span>811</span><span>832</span></div><div class="proof-range"><i></i></div><p><b>742—811px</b><span>primary CTA clipped</span></p><code>.checkout-actions &gt; button</code></div>
       </section>
 
       <section class="integration">

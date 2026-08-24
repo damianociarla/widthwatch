@@ -3,12 +3,42 @@ import "./styles.css";
 const commands = document.querySelectorAll<HTMLButtonElement>("[data-copy]");
 for (const command of commands) {
   command.addEventListener("click", async () => {
-    await navigator.clipboard.writeText(command.dataset.copy ?? "");
     const label = command.querySelector("span");
-    if (label) label.textContent = "Copied";
+    try {
+      await copyText(command.dataset.copy ?? "");
+      if (label) label.textContent = "Copied";
+    } catch {
+      if (label) label.textContent = "Select text";
+      command.querySelector("code")?.setAttribute("data-copy-failed", "true");
+    }
     window.setTimeout(() => { if (label) label.textContent = "Copy"; }, 1400);
   });
 }
+
+async function copyText(value: string): Promise<void> {
+  if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(value);
+  const input = document.createElement("textarea");
+  input.value = value;
+  input.style.position = "fixed";
+  input.style.opacity = "0";
+  document.body.append(input);
+  input.select();
+  const copied = document.execCommand("copy");
+  input.remove();
+  if (!copied) throw new Error("Clipboard access is unavailable.");
+}
+
+const navToggle = document.querySelector<HTMLButtonElement>("#navToggle");
+const primaryNav = document.querySelector<HTMLElement>("#primaryNav");
+navToggle?.addEventListener("click", () => {
+  const expanded = navToggle.getAttribute("aria-expanded") === "true";
+  navToggle.setAttribute("aria-expanded", String(!expanded));
+  primaryNav?.toggleAttribute("data-open", !expanded);
+});
+primaryNav?.querySelectorAll("a").forEach((link) => link.addEventListener("click", () => {
+  navToggle?.setAttribute("aria-expanded", "false");
+  primaryNav.removeAttribute("data-open");
+}));
 
 const heroWidth = document.querySelector<HTMLElement>("#heroWidth");
 if (heroWidth && !matchMedia("(prefers-reduced-motion: reduce)").matches) {

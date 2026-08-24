@@ -41,6 +41,19 @@ test("identical complete schedules produce a valid passing comparison", () => {
   assert.equal(comparison.passed, true);
   assert.equal(comparison.diffs.length, 2);
   assert.deepEqual(comparison.validationErrors, []);
+  assert.deepEqual(comparison.resolved, []);
+  assert.deepEqual(comparison.settings, { threshold: 0.2, maxDiffRatio: 0.001 });
+});
+
+test("comparison reports new, resolved and ranged issues", () => {
+  const baseline = report([320, 640]);
+  const candidate = report([320, 640]);
+  baseline.frames[0].issues = [{ id: "old", kind: "clipped-text", severity: "error", width: 320, message: "old", elements: [{ selector: "#old", tagName: "p", rect: { x: 0, y: 0, width: 1, height: 1 } }] }];
+  for (const frame of candidate.frames) frame.issues = [{ id: `new-${frame.width}`, kind: "element-overflow", severity: "warning", width: frame.width, message: "new", elements: [{ selector: "#new", tagName: "p", rect: { x: 0, y: 0, width: 1, height: 1 } }] }];
+  const comparison = compareReports(baseline, candidate);
+  assert.equal(comparison.regressions.length, 2);
+  assert.equal(comparison.resolved.length, 1);
+  assert.deepEqual(comparison.regressionRanges.map((range) => [range.from, range.to, range.occurrences]), [[320, 640, 2]]);
 });
 
 test("missing and unexpected widths fail closed", () => {
