@@ -9,3 +9,7 @@ test("landing exposes the scanner, docs and package command", async () => {
   assert.match(html, /docs\.html/);
 });
 
+test("production build uses the GitHub Pages repository base path", async () => {
+  const config = await readFile(new URL("../vite.config.ts", import.meta.url), "utf8");
+  assert.match(config, /base:\s*["']\/widthwatch\/["']/);
+});
