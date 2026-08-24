@@ -1,0 +1,20 @@
+{
+  "name": "widthwatch-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm test --workspaces --if-present",
+    "typecheck": "npm run build --workspace widthwatch && npm run typecheck --workspaces --if-present",
+    "dev": "npm run dev --workspace @widthwatch/web",
+    "scan:demo": "npm run build --workspace widthwatch && node packages/widthwatch/dist/cli.js https://example.com --output reports/example.html",
+    "pack:check": "npm pack --workspace widthwatch --dry-run"
+  },
+  "engines": { "node": ">=24" },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "typescript": "^5.9.2"
+  }
+}

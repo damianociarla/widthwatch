@@ -1,0 +1,57 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Bounded WidthWatch App Runner API
+Parameters:
+  ImageIdentifier: { Type: String }
+  EcrAccessRoleArn: { Type: String }
+  OriginVerifyToken: { Type: String, NoEcho: true }
+  AllowedOrigins: { Type: String, Default: "https://damianociarla.github.io" }
+  BudgetAlertEmail: { Type: String, Default: "" }
+  MonthlyBudgetUsd: { Type: Number, Default: 20 }
+Conditions:
+  HasBudgetAlertEmail: !Not [!Equals [!Ref BudgetAlertEmail, ""]]
+Resources:
+  Scaling:
+    Type: AWS::AppRunner::AutoScalingConfiguration
+    Properties:
+      AutoScalingConfigurationName: widthwatch-hard-cap
+      MinSize: 1
+      MaxSize: 1
+      MaxConcurrency: 1
+  Service:
+    Type: AWS::AppRunner::Service
+    Properties:
+      ServiceName: widthwatch-api
+      AutoScalingConfigurationArn: !GetAtt Scaling.AutoScalingConfigurationArn
+      HealthCheckConfiguration: { Path: /health, Protocol: HTTP, Interval: 10, Timeout: 5, HealthyThreshold: 1, UnhealthyThreshold: 5 }
+      InstanceConfiguration: { Cpu: "1 vCPU", Memory: "2 GB" }
+      SourceConfiguration:
+        AutoDeploymentsEnabled: false
+        AuthenticationConfiguration: { AccessRoleArn: !Ref EcrAccessRoleArn }
+        ImageRepository:
+          ImageIdentifier: !Ref ImageIdentifier
+          ImageRepositoryType: ECR
+          ImageConfiguration:
+            Port: "8080"
+            RuntimeEnvironmentVariables:
+              - { Name: ORIGIN_VERIFY_TOKEN, Value: !Ref OriginVerifyToken }
+              - { Name: ALLOWED_ORIGINS, Value: !Ref AllowedOrigins }
+              - { Name: RATE_LIMIT_PER_10_MINUTES, Value: "2" }
+              - { Name: TARGET_RATE_LIMIT_PER_HOUR, Value: "2" }
+              - { Name: GLOBAL_RATE_LIMIT_PER_HOUR, Value: "30" }
+  MonthlyCostBudget:
+    Type: AWS::Budgets::Budget
+    Condition: HasBudgetAlertEmail
+    Properties:
+      Budget:
+        BudgetName: widthwatch-monthly-cost
+        BudgetLimit: { Amount: !Ref MonthlyBudgetUsd, Unit: USD }
+        BudgetType: COST
+        TimeUnit: MONTHLY
+      NotificationsWithSubscribers:
+        - Notification: { ComparisonOperator: GREATER_THAN, NotificationType: FORECASTED, Threshold: 80, ThresholdType: PERCENTAGE }
+          Subscribers: [{ Address: !Ref BudgetAlertEmail, SubscriptionType: EMAIL }]
+        - Notification: { ComparisonOperator: GREATER_THAN, NotificationType: ACTUAL, Threshold: 100, ThresholdType: PERCENTAGE }
+          Subscribers: [{ Address: !Ref BudgetAlertEmail, SubscriptionType: EMAIL }]
+Outputs:
+  ServiceUrl: { Value: !GetAtt Service.ServiceUrl }
+  ServiceArn: { Value: !GetAtt Service.ServiceArn }

@@ -1,0 +1,79 @@
+name: Release
+on:
+  push: { tags: ["v*"] }
+  workflow_dispatch:
+    inputs:
+      tag: { description: "Existing version tag", required: true, type: string }
+permissions: {}
+concurrency: { group: widthwatch-release, cancel-in-progress: false }
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions: { contents: read }
+    steps:
+      - uses: actions/checkout@v6
+        with: { ref: "${{ env.RELEASE_TAG }}" }
+      - uses: actions/setup-node@v6
+        with: { node-version: 24, cache: npm }
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run typecheck && npm test && npm run build && npm run pack:check
+  deploy-api:
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production
+    permissions: { contents: read, id-token: write }
+    steps:
+      - uses: actions/checkout@v6
+        with: { ref: "${{ env.RELEASE_TAG }}" }
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: eu-west-1
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+      - run: ./infra/aws/deploy.sh
+        env:
+          AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+          AWS_ECR_ACCESS_ROLE_ARN: ${{ vars.AWS_ECR_ACCESS_ROLE_ARN }}
+          WIDTHWATCH_ORIGIN_VERIFY_TOKEN: ${{ secrets.WIDTHWATCH_ORIGIN_VERIFY_TOKEN }}
+          WIDTHWATCH_IMAGE_TAG: ${{ env.RELEASE_TAG }}
+  publish-npm:
+    needs: deploy-api
+    runs-on: ubuntu-latest
+    environment: production
+    permissions: { contents: read, id-token: write }
+    steps:
+      - uses: actions/checkout@v6
+        with: { ref: "${{ env.RELEASE_TAG }}" }
+      - uses: actions/setup-node@v6
+        with: { node-version: 24, registry-url: "https://registry.npmjs.org", package-manager-cache: false }
+      - run: npm ci && npm run build --workspace widthwatch
+      - run: npm publish --workspace widthwatch
+  deploy-site:
+    needs: publish-npm
+    runs-on: ubuntu-latest
+    environment: github-pages
+    permissions: { contents: read, pages: write, id-token: write }
+    steps:
+      - uses: actions/checkout@v6
+        with: { ref: "${{ env.RELEASE_TAG }}" }
+      - uses: actions/setup-node@v6
+        with: { node-version: 24, cache: npm }
+      - run: npm ci && npm run build --workspace @widthwatch/web
+        env: { VITE_API_URL: "${{ vars.VITE_API_URL }}" }
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with: { path: apps/web/dist }
+      - uses: actions/deploy-pages@v4
+  github-release:
+    needs: deploy-site
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v6
+        with: { ref: "${{ env.RELEASE_TAG }}" }
+      - run: gh release create "$RELEASE_TAG" --verify-tag --generate-notes --title "WidthWatch $RELEASE_TAG"
+        env: { GH_TOKEN: "${{ github.token }}" }
+

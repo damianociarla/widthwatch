@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="WidthWatch finds responsive regressions between the breakpoints you remembered to test." />
+    <meta name="theme-color" content="#090b08" />
+    <title>WidthWatch · Continuous responsive regression testing</title>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="WidthWatch home">width<span>watch</span></a>
+      <nav aria-label="Primary navigation">
+        <a href="#demo">Demo</a><a href="#engine">Engine</a><a href="./docs.html">Docs</a><a href="https://github.com/damianociarla/widthwatch">GitHub ↗</a>
+      </nav>
+    </header>
+    <main id="main">
+      <section class="hero" id="top">
+        <div class="hero-copy reveal">
+          <p class="eyebrow">Open-source responsive testing</p>
+          <h1>Find the width<br>where it <em>breaks.</em></h1>
+          <p class="lede">WidthWatch scans the space between mobile and desktop, then turns layout discontinuities into evidence your pull request can act on.</p>
+          <button class="command" data-widthwatch-ignore data-copy="npx widthwatch https://your-site.com"><code>npx widthwatch https://your-site.com</code><span>Copy</span></button>
+        </div>
+        <div class="scope" aria-label="Animated responsive scan visualization">
+          <div class="scope-grid"></div><div class="scan-line"></div>
+          <div class="width-readout"><span>viewport</span><strong id="heroWidth">768</strong><i>px</i></div>
+          <div class="wave" aria-hidden="true"><svg viewBox="0 0 1000 260" preserveAspectRatio="none"><path d="M0 180 L90 180 L110 152 L185 152 L205 192 L280 192 L300 110 L375 110 L395 150 L520 150 L540 72 L620 72 L640 168 L740 168 L760 126 L850 126 L870 184 L1000 184" /></svg></div>
+          <div class="fault fault-a"><b>overflow</b><span>523px</span></div><div class="fault fault-b"><b>overlap</b><span>911px</span></div>
+          <div class="scope-label">adaptive width trace / live</div>
+        </div>
+      </section>
+
+      <section class="live" id="demo">
+        <div class="section-head reveal"><p class="eyebrow">Public scanner / bounded beta</p><h2>Trace a public page.</h2><p>One URL. A controlled width range. No login, cookies, or private networks.</p></div>
+        <form class="scanner" id="scanForm">
+          <label for="url">Website URL</label><div class="input-row"><input id="url" name="url" type="url" required placeholder="https://example.com" autocomplete="url"><button type="submit">Analyze <span>→</span></button></div>
+          <p>By continuing, you confirm you are authorized to test this public page.</p>
+        </form>
+        <div class="console" id="console" aria-live="polite">
+          <div class="console-top"><span>widthwatch / browser</span><span class="ready" id="scanState">● ready</span></div>
+          <div class="console-body"><div class="mini-timeline" id="miniTimeline"></div><div class="console-message" id="scanMessage">Waiting for a URL</div></div>
+        </div>
+      </section>
+
+      <section class="report" id="engine">
+        <div class="report-copy reveal"><p class="eyebrow">The missing dimension</p><h2>Breakpoints are not the test.</h2><p>A bug at 853px is invisible when your suite only captures 375, 768, and 1440. WidthWatch follows layout change itself.</p><ol><li><span>01</span><b>Sample</b><p>Start with a sparse width sweep.</p></li><li><span>02</span><b>Bisect</b><p>Spend samples where geometry changes.</p></li><li><span>03</span><b>Explain</b><p>Overlay the exact element and regression.</p></li></ol></div>
+        <div class="report-ui" aria-label="Sample WidthWatch report">
+          <div class="ui-top"><b>sample report</b><span>18 widths · 2 errors</span></div>
+          <div class="heatline"><button style="left:0%"><span>320</span></button><button style="left:18%"><span>523</span></button><button class="hot" style="left:49%"><span>853</span></button><button style="left:71%"><span>1040</span></button><button style="left:100%"><span>1440</span></button></div>
+          <div class="viewport-demo"><div class="fake-nav"><i></i><i></i><i></i></div><div class="fake-title"></div><div class="fake-copy"></div><div class="fake-button"></div><div class="collision">clipped text</div></div>
+          <div class="ui-finding"><span>853px · clipped-text</span><b>Heading exceeds its visible container.</b><code>main &gt; section:nth-of-type(2) &gt; h2</code></div>
+        </div>
+      </section>
+
+      <section class="integration">
+        <p class="eyebrow">One engine. Three surfaces.</p><div class="integration-row"><article><span>01</span><h3>Typed API</h3><p>Use report objects directly in your TypeScript tooling.</p><code>scanResponsive(url, options)</code></article><article><span>02</span><h3>Portable HTML</h3><p>Open locally, attach to CI, or keep as an artifact.</p><code>generateHtmlReport(report)</code></article><article><span>03</span><h3>Pull requests</h3><p>Compare candidate and baseline at identical widths.</p><code>--fail-on-regression</code></article></div>
+      </section>
+
+      <section class="final"><div><p class="eyebrow">MIT licensed · TypeScript · Chromium</p><h2>Watch every width.</h2></div><button class="command" data-widthwatch-ignore data-copy="npx widthwatch https://your-site.com"><code>npx widthwatch https://your-site.com</code><span>Copy</span></button></section>
+    </main>
+    <footer><a class="brand" href="#top">width<span>watch</span></a><p>Built by <a href="https://github.com/damianociarla">Damiano Ciarla</a> for layouts that survive the space between breakpoints.</p></footer>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

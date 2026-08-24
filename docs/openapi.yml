@@ -1,0 +1,33 @@
+openapi: 3.1.0
+info: { title: WidthWatch hosted scanner, version: 0.1.0 }
+servers: [{ url: "https://api.example.com" }]
+paths:
+  /health:
+    get:
+      operationId: health
+      responses: { "200": { description: Healthy } }
+  /v1/scans:
+    post:
+      operationId: createScan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [url]
+              properties: { url: { type: string, format: uri, maxLength: 2000 } }
+      responses:
+        "202": { description: Accepted }
+        "400": { description: Invalid or unsafe URL }
+        "429": { description: Client, target, or global quota reached }
+        "503": { description: Hard capacity limit reached }
+  /v1/scans/{id}:
+    get:
+      operationId: getScan
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        "200": { description: Job status and optional report }
+        "404": { description: Unknown or expired job }
+
