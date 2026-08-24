@@ -40,10 +40,17 @@ async function createScan(request: IncomingMessage, response: ServerResponse): P
     if (!consumeRateLimits([{ limiter: clientLimit, key: client }, { limiter: targetLimit, key: target.hostname }, { limiter: globalLimit, key: "global" }])) return json(response, 429, { error: "rate_limited", retryAfterSeconds: 600 });
     const job: Job = { id: randomUUID(), url: target.toString(), createdAt: Date.now(), status: "queued" };
     jobs.set(job.id, job); queue.push(job); void drain();
-    await holdConnectionUntilSettled(job, Number(process.env.INITIAL_RESPONSE_WAIT_MS ?? 20_000));
-    json(response, 202, { ...scanStatusPayload(job), pollUrl: `/v1/scans/${job.id}` });
+    response.writeHead(202, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+    response.write("\n");
+    await holdConnectionUntilSettled(
+      job,
+      Number(process.env.INITIAL_RESPONSE_WAIT_MS ?? 55_000),
+      () => { if (!response.destroyed && !response.writableEnded) response.write(" \n"); },
+    );
+    if (!response.destroyed && !response.writableEnded) response.end(JSON.stringify({ ...scanStatusPayload(job), pollUrl: `/v1/scans/${job.id}` }));
   } catch (error) {
-    json(response, error instanceof UnsafeUrlError ? 400 : 500, { error: error instanceof UnsafeUrlError ? "unsafe_url" : "internal_error" });
+    if (!response.headersSent) json(response, error instanceof UnsafeUrlError ? 400 : 500, { error: error instanceof UnsafeUrlError ? "unsafe_url" : "internal_error" });
+    else if (!response.destroyed && !response.writableEnded) response.end(JSON.stringify({ error: "internal_error" }));
   }
 }
 

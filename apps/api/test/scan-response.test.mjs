@@ -9,6 +9,14 @@ test("initial response waits for an active scan to settle", async () => {
   assert.equal(job.status, "complete");
 });
 
+test("initial response emits heartbeats while a scan is active", async () => {
+  const job = { id: "scan-1", status: "running" };
+  let heartbeats = 0;
+  setTimeout(() => { job.status = "complete"; }, 130);
+  await holdConnectionUntilSettled(job, 500, () => { heartbeats += 1; }, 30);
+  assert.ok(heartbeats >= 2);
+});
+
 test("hosted status excludes screenshot payloads", () => {
   const job = {
     id: "scan-1",

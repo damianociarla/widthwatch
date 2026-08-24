@@ -10,9 +10,21 @@ export interface HostedScanJob {
   error?: string;
 }
 
-export async function holdConnectionUntilSettled(job: HostedScanJob, timeoutMs: number): Promise<void> {
+export async function holdConnectionUntilSettled(
+  job: HostedScanJob,
+  timeoutMs: number,
+  heartbeat?: () => void,
+  heartbeatIntervalMs = 5_000,
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
-  while ((job.status === "queued" || job.status === "running") && Date.now() < deadline) await delay(50);
+  let nextHeartbeat = Date.now() + heartbeatIntervalMs;
+  while ((job.status === "queued" || job.status === "running") && Date.now() < deadline) {
+    if (heartbeat && Date.now() >= nextHeartbeat) {
+      heartbeat();
+      nextHeartbeat = Date.now() + heartbeatIntervalMs;
+    }
+    await delay(50);
+  }
 }
 
 export function scanStatusPayload(job: HostedScanJob): Record<string, unknown> {
