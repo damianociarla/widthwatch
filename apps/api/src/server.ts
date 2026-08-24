@@ -4,7 +4,7 @@ import { generateHtmlReport, scanResponsive, type WidthWatchReport } from "width
 import { startPinnedEgressProxy } from "./egress-proxy.js";
 import { assertPublicUrl, resolvePublicTarget, UnsafeUrlError } from "./network-policy.js";
 import { holdConnectionUntilSettled, scanStatusPayload, type HostedScanStatus } from "./scan-response.js";
-import { ReportStore } from "./report-store.js";
+import { persistReportBestEffort, ReportStore } from "./report-store.js";
 import { consumeRateLimits, SlidingWindowLimiter } from "./security.js";
 import { API_VERSION } from "./version.js";
 
@@ -90,12 +90,12 @@ async function drain(): Promise<void> {
     try {
       job.report = await scanResponsive(job.url, {
         mode: "layout", imageFormat: "jpeg", imageQuality: 70, minWidth: 320, maxWidth: 1440, viewportHeight: 800, initialStep: 400, minStep: 32, maxSamples: 5,
-        maxElements: 250, maxDomNodes: 2_500, timeoutMs: 15_000, settleMs: 50, maxRequests: 200, blockResourceTypes: ["media", "websocket"],
+        maxElements: 250, maxDomNodes: 2_500, timeoutMs: 15_000, settleMs: 50, maxRequestsPerNavigation: 200, maxTotalRequests: 1_000, blockResourceTypes: ["media", "websocket"],
         proxyServer: proxy.url, allowedUrl: async (url) => resolvePublicTarget(url).then(() => true, () => false),
       });
       job.reportHtml = generateHtmlReport(job.report);
-      await reportStore.put(job.id, job.reportHtml);
       job.status = "complete";
+      void persistReportBestEffort(reportStore, job.id, job.reportHtml);
     } catch { job.status = "failed"; job.error = "The bounded scan could not complete."; }
   }
   running = false;

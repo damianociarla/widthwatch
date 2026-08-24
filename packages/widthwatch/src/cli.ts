@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { parseCliOptions } from "./cli-options.js";
+import { applyCliScanOptions, parseCliOptions } from "./cli-options.js";
 import { compareReports } from "./compare.js";
 import { loadWidthWatchConfig } from "./config.js";
 import { initializeProject } from "./init.js";
 import { generateHtmlReport } from "./reporter.js";
 import { scanResponsive } from "./scanner.js";
-import type { ScanOptions, WidthWatchReport } from "./types.js";
+import type { WidthWatchReport } from "./types.js";
 import { PACKAGE_VERSION } from "./version.js";
 
 const help = `widthwatch [url] [options]
@@ -64,21 +64,21 @@ async function main(): Promise<void> {
   }
 
   console.log(`WidthWatch · scanning ${url}`);
-  const scanOptions: ScanOptions = { ...configured?.scan };
-  if (parsed.minWidth !== undefined) scanOptions.minWidth = parsed.minWidth;
-  if (parsed.maxWidth !== undefined) scanOptions.maxWidth = parsed.maxWidth;
-  if (parsed.maxSamples !== undefined) scanOptions.maxSamples = parsed.maxSamples;
-  if (parsed.layoutOnly) scanOptions.mode = "layout";
-  if (!parsed.layoutOnly || parsed.reloadPerWidth) scanOptions.reloadPerWidth = true;
-  if (parsed.fullPage) scanOptions.screenshot = "full-page";
+  const scanOptions = applyCliScanOptions(configured?.scan, parsed);
   if (baseline) {
+    if (baseline.capture?.protocolVersion !== 1) throw new Error("The baseline uses an unsupported capture protocol. Re-capture it with this WidthWatch version.");
     scanOptions.exactWidths = baseline.frames.map((frame) => frame.width);
     scanOptions.viewportHeight = baseline.range.height;
     if (baseline.capture) {
       scanOptions.mode = baseline.capture.mode;
       scanOptions.screenshot = baseline.capture.screenshot;
+      if (baseline.capture.imageFormat) scanOptions.imageFormat = baseline.capture.imageFormat;
+      scanOptions.imageQuality = baseline.capture.imageQuality;
       scanOptions.scrollSweep = baseline.capture.scrollSweep;
+      scanOptions.maxScrollSteps = baseline.capture.maxScrollSteps;
+      scanOptions.settleMs = baseline.capture.settleMs;
       scanOptions.reloadPerWidth = baseline.capture.reloadPerWidth;
+      scanOptions.hideSelectors = baseline.capture.hideSelectors;
       if (baseline.capture.pageReady && (!scanOptions.pageReady || scanOptions.readinessKey !== baseline.capture.readinessKey)) {
         throw new Error("This baseline requires the matching pageReady hook and readinessKey in widthwatch.config.ts.");
       }
@@ -87,7 +87,7 @@ async function main(): Promise<void> {
   const report = await scanResponsive(url, scanOptions);
 
   let rendered: WidthWatchReport | ReturnType<typeof compareReports> = report;
-  if (baseline) rendered = compareReports(baseline, report, configured?.compare);
+  if (baseline) rendered = compareReports(baseline, report, { ...configured?.compare, includeDiffImages: true });
   await mkdir(dirname(outputPath), { recursive: true });
   await writeFile(outputPath, generateHtmlReport(rendered), "utf8");
   if (jsonPath) {

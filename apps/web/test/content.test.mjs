@@ -13,6 +13,9 @@ test("landing exposes the scanner, docs and published package command", async ()
   assert.doesNotMatch(html, /Watch every width/);
   assert.match(html, /rel="canonical"/);
   assert.match(html, /application\/ld\+json/);
+  assert.match(html, /og-widthwatch\.png/);
+  assert.match(html, /summary_large_image/);
+  assert.match(html, /softwareVersion":"0\.2\.3/);
   assert.match(html, /id="navToggle"/);
   assert.match(html, /Reproducible evidence/);
   assert.match(html, /href="\.\/proof\.html"/);
@@ -33,7 +36,7 @@ test("production artifact includes real proof fixtures and comparison report", a
   const proof = await readFile(new URL("../dist/proof.html", import.meta.url), "utf8");
   const candidate = await readFile(new URL("../dist/proof-candidate.html", import.meta.url), "utf8");
   assert.match(proof, /First regression/);
-  assert.match(proof, /742—811px/);
+  assert.match(proof, /Observed at 742—811px/);
   assert.match(proof, /clipped-text/);
   assert.match(candidate, /min-width:742px/);
 });

@@ -3,8 +3,9 @@ import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = resolve(new URL("..", import.meta.url).pathname);
+const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const expectedVersion = JSON.parse(await readFile(join(root, "packages/widthwatch/package.json"), "utf8")).version;
 const temporary = await mkdtemp(join(tmpdir(), "widthwatch-pack-"));
 const project = join(temporary, "consumer");

@@ -20,12 +20,12 @@ export function groupIssuesByRange(widths: number[], issues: ResponsiveIssue[]):
     for (const issue of ordered) {
       const previous = current.at(-1);
       if (previous && (widthIndex.get(issue.width) ?? 0) !== (widthIndex.get(previous.width) ?? 0) + 1) {
-        ranges.push(toRange(identity, current, ranges.length));
+        ranges.push(toRange(identity, current, ranges.length, orderedWidths, widthIndex));
         current = [];
       }
       current.push(issue);
     }
-    if (current.length) ranges.push(toRange(identity, current, ranges.length));
+    if (current.length) ranges.push(toRange(identity, current, ranges.length, orderedWidths, widthIndex));
   }
   return ranges.sort((a, b) => a.from - b.from || severityRank(b.severity) - severityRank(a.severity) || a.kind.localeCompare(b.kind));
 }
@@ -34,9 +34,11 @@ function issueIdentity(issue: ResponsiveIssue): string {
   return `${issue.kind}:${issue.elements.map((element) => element.selector).sort().join("|")}`;
 }
 
-function toRange(identity: string, issues: ResponsiveIssue[], index: number): ResponsiveIssueRange {
+function toRange(identity: string, issues: ResponsiveIssue[], index: number, orderedWidths: number[], widthIndex: Map<number, number>): ResponsiveIssueRange {
   const first = issues[0]!;
   const sampledWidths = issues.map((issue) => issue.width);
+  const firstIndex = widthIndex.get(Math.min(...sampledWidths));
+  const lastIndex = widthIndex.get(Math.max(...sampledWidths));
   return {
     id: `${first.kind}-${hash(identity)}-${index}`,
     kind: first.kind,
@@ -45,6 +47,8 @@ function toRange(identity: string, issues: ResponsiveIssue[], index: number): Re
     to: Math.max(...sampledWidths),
     sampledWidths,
     occurrences: issues.length,
+    ...(firstIndex !== undefined && firstIndex > 0 ? { cleanBefore: orderedWidths[firstIndex - 1] } : {}),
+    ...(lastIndex !== undefined && lastIndex < orderedWidths.length - 1 ? { cleanAfter: orderedWidths[lastIndex + 1] } : {}),
     message: first.message,
     elements: first.elements,
   };

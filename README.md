@@ -26,7 +26,7 @@ The engine returns versioned TypeScript objects, renders a portable interactive 
 - document and element overflow detection;
 - clipped-text and material leaf-overlap detection;
 - layout discontinuity signals;
-- issue ranges such as `742–811px` instead of disconnected frame findings;
+- observed issue ranges such as `742–811px`, with adjacent clean samples, instead of claiming unsampled boundaries;
 - full-page visual mode with bounded scroll sweep and lazy-content activation;
 - optional reload-per-width and application-specific Playwright readiness hook;
 - optional compact JPEG evidence for standalone diagnostics;
@@ -88,7 +88,7 @@ The CLI uses correctness-first visual capture and reloads each width. For a fast
 
 The generated workflow is deliberately read-only and uploads the portable report as an artifact. It accepts a deployed preview URL through `workflow_call` or manual dispatch, and never uses `pull_request_target`. Connect it to the step that already deploys your application preview.
 
-See the [reproducible 742–811px regression](https://damianociarla.github.io/widthwatch/proof.html) for a real baseline/candidate/diff report generated from the committed fixtures.
+See the [regression observed at 742, 768 and 811px](https://damianociarla.github.io/widthwatch/proof.html) for a real baseline/candidate/diff report generated from the committed fixtures; 720 and 832px are the adjacent clean samples.
 
 ## Repository
 

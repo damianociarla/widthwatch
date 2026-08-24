@@ -11,8 +11,11 @@
     <meta property="og:url" content="https://damianociarla.github.io/widthwatch/" />
     <meta property="og:title" content="WidthWatch · Catch what fixed breakpoints miss" />
     <meta property="og:description" content="Adaptive responsive regression testing with typed evidence and portable reports." />
-    <meta name="twitter:card" content="summary" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"WidthWatch","applicationCategory":"DeveloperApplication","operatingSystem":"Node.js","softwareVersion":"0.1","url":"https://damianociarla.github.io/widthwatch/","downloadUrl":"https://www.npmjs.com/package/widthwatch","license":"https://opensource.org/licenses/MIT"}</script>
+    <meta property="og:image" content="https://damianociarla.github.io/widthwatch/og-widthwatch.png" />
+    <meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://damianociarla.github.io/widthwatch/og-widthwatch.png" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"WidthWatch","applicationCategory":"DeveloperApplication","operatingSystem":"Node.js","softwareVersion":"0.2.3","url":"https://damianociarla.github.io/widthwatch/","downloadUrl":"https://www.npmjs.com/package/widthwatch","license":"https://opensource.org/licenses/MIT"}</script>
     <title>WidthWatch · Adaptive responsive regression testing</title>
   </head>
   <body>
@@ -64,8 +67,8 @@
       </section>
 
       <section class="proof" id="proof">
-        <div class="proof-copy reveal"><p class="eyebrow">Reproducible evidence</p><h2>A regression,<br>not a mockup.</h2><p>The same fixture is captured as baseline and candidate at five exact widths. The candidate loses its primary action only inside the measured interval.</p><a class="proof-link" href="./proof.html">Open the real comparison report <span>↗</span></a></div>
-        <div class="proof-trace" aria-label="Demonstrated regression from 742 to 811 pixels"><div class="proof-axis"><span>720</span><span>742</span><span>768</span><span>811</span><span>832</span></div><div class="proof-range"><i></i></div><p><b>742—811px</b><span>primary CTA clipped</span></p><code>.checkout-actions &gt; button</code></div>
+        <div class="proof-copy reveal"><p class="eyebrow">Reproducible evidence</p><h2>A regression,<br>not a mockup.</h2><p>The same fixture is captured as baseline and candidate at five exact widths. The primary action is missing at three sampled widths, bounded by clean samples.</p><a class="proof-link" href="./proof.html">Open the real comparison report <span>↗</span></a></div>
+        <div class="proof-trace" aria-label="Regression observed at 742, 768 and 811 pixels; 720 and 832 pixels are clean"><div class="proof-axis"><span>720</span><span>742</span><span>768</span><span>811</span><span>832</span></div><div class="proof-range"><i></i></div><p><b>Observed at 742—811px</b><span>720 &amp; 832px clean · primary CTA clipped</span></p><code>.checkout-actions &gt; button</code></div>
       </section>
 
       <section class="integration">

@@ -9,6 +9,29 @@ function screenshot(width = 2, height = 2, value = 0) {
   return `data:image/png;base64,${PNG.sync.write(png).toString("base64")}`;
 }
 
+function capture(overrides = {}) {
+  return {
+    protocolVersion: 1,
+    mode: "visual",
+    screenshot: "full-page",
+    imageFormat: "png",
+    imageQuality: 80,
+    scrollSweep: true,
+    maxScrollSteps: 20,
+    settleMs: 120,
+    reloadPerWidth: false,
+    hideSelectors: [],
+    deviceScaleFactor: 1,
+    colorScheme: "light",
+    reducedMotion: "reduce",
+    locale: "en-US",
+    timezoneId: "UTC",
+    pageReady: false,
+    readinessKey: null,
+    ...overrides,
+  };
+}
+
 function report(widths, overrides = {}) {
   const frames = widths.map((width) => ({
     width,
@@ -27,7 +50,7 @@ function report(widths, overrides = {}) {
     durationMs: 1,
     range: { min: Math.min(...widths), max: Math.max(...widths), height: 800 },
     environment: { browser: "Chromium 1", platform: "linux", packageVersion: "0.1.0" },
-    capture: { mode: "visual", screenshot: "full-page", scrollSweep: true, reloadPerWidth: false, pageReady: false, readinessKey: null },
+    capture: capture(),
     frames,
     transitions: [],
     summary: { errors: 0, warnings: 0, info: 0, sampledWidths: frames.length },
@@ -82,9 +105,15 @@ test("different rendering environments fail closed", () => {
   assert.equal(comparison.validationErrors[0].code, "environment-mismatch");
 });
 
+test("package patches do not invalidate an unchanged capture protocol", () => {
+  const baseline = report([320]);
+  const candidate = report([320], { environment: { ...baseline.environment, packageVersion: "0.2.3" } });
+  assert.equal(compareReports(baseline, candidate).valid, true);
+});
+
 test("different capture modes fail closed", () => {
   const baseline = report([320]);
-  const candidate = report([320], { capture: { mode: "layout", screenshot: "viewport", scrollSweep: false, reloadPerWidth: false, pageReady: false, readinessKey: null } });
+  const candidate = report([320], { capture: capture({ mode: "layout", screenshot: "viewport", scrollSweep: false }) });
   const comparison = compareReports(baseline, candidate);
   assert.equal(comparison.valid, false);
   assert.equal(comparison.passed, false);
@@ -104,9 +133,17 @@ test("lossy screenshots fail closed for pixel comparison", () => {
 });
 
 test("different readiness keys fail closed", () => {
-  const baseline = report([320], { capture: { mode: "visual", screenshot: "full-page", scrollSweep: true, reloadPerWidth: true, pageReady: true, readinessKey: "ready-v1" } });
-  const candidate = report([320], { capture: { mode: "visual", screenshot: "full-page", scrollSweep: true, reloadPerWidth: true, pageReady: true, readinessKey: "ready-v2" } });
+  const baseline = report([320], { capture: capture({ reloadPerWidth: true, pageReady: true, readinessKey: "ready-v1" }) });
+  const candidate = report([320], { capture: capture({ reloadPerWidth: true, pageReady: true, readinessKey: "ready-v2" }) });
   const comparison = compareReports(baseline, candidate);
   assert.equal(comparison.valid, false);
   assert.match(comparison.validationErrors[0].message, /readinessKey/);
+});
+
+test("render-affecting selectors and protocol versions fail closed", () => {
+  const baseline = report([320]);
+  const hiddenCandidate = report([320], { capture: capture({ hideSelectors: [".clock"] }) });
+  assert.match(compareReports(baseline, hiddenCandidate).validationErrors[0].message, /hideSelectors/);
+  const protocolCandidate = report([320], { capture: capture({ protocolVersion: 2 }) });
+  assert.match(compareReports(baseline, protocolCandidate).validationErrors[0].message, /protocolVersion/);
 });

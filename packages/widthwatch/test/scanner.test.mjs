@@ -26,6 +26,8 @@ test("invalid numeric options fail before launching a browser", async () => {
   await assert.rejects(scanResponsive("https://example.com", { imageQuality: 0 }), /imageQuality/);
   await assert.rejects(scanResponsive("https://example.com", { maxScrollSteps: 0 }), /maxScrollSteps/);
   await assert.rejects(scanResponsive("https://example.com", { pageReadyTimeoutMs: Number.NaN }), /pageReadyTimeoutMs/);
+  await assert.rejects(scanResponsive("https://example.com", { maxRequestsPerNavigation: 0 }), /maxRequestsPerNavigation/);
+  await assert.rejects(scanResponsive("https://example.com", { maxTotalRequests: 0 }), /maxTotalRequests/);
   await assert.rejects(scanResponsive("https://example.com", { pageReady: async () => {} }), /readinessKey/);
 });
 
@@ -81,6 +83,27 @@ test("reloadPerWidth navigates once at every requested width", async (context) =
   assert.equal(navigations, 2);
 });
 
+test("request budgets reset per navigation while retaining a separate total cap", async (context) => {
+  const scripts = Array.from({ length: 25 }, (_, index) => `<script src="/asset-${index}.js"></script>`).join("");
+  const url = await fixture(context, (request, response) => {
+    if (request.url === "/") return html(response, scripts);
+    response.writeHead(200, { "content-type": "text/javascript" }).end("void 0");
+  });
+  const options = { mode: "layout", reloadPerWidth: true, viewportHeight: 480, settleMs: 0, maxRequestsPerNavigation: 30, maxTotalRequests: 100 };
+  const report = await scanAtWidths(url, [320, 480, 640], options);
+  assert.equal(report.frames.length, 3);
+  await assert.rejects(
+    scanAtWidths(url, [320, 480, 640], { ...options, maxTotalRequests: 50 }),
+    /WidthWatch total request budget exceeded \(50 allowed requests\)/,
+  );
+});
+
+test("resources blocked by policy do not consume the request budget", async (context) => {
+  const url = await fixture(context, (_request, response) => html(response, '<video autoplay src="/large.mp4"></video>'));
+  const report = await scanAtWidths(url, [320], { mode: "layout", viewportHeight: 480, settleMs: 0, maxRequestsPerNavigation: 1, maxTotalRequests: 1, blockResourceTypes: ["media"] });
+  assert.equal(report.frames.length, 1);
+});
+
 test("maxElements is applied after invisible nodes are filtered", async (context) => {
   const hidden = Array.from({ length: 8 }, (_, index) => `<div style="display:none">hidden ${index}</div>`).join("");
   const url = await fixture(context, (_request, response) => html(response, `${hidden}<div id="important" style="width:30px;white-space:nowrap;overflow:hidden">important clipped content</div>`));
@@ -96,6 +119,7 @@ test("scanner groups the same finding across consecutive sampled widths", async 
   const result = await scanAtWidths(url, [320, 400, 480], { mode: "layout", viewportHeight: 480, settleMs: 0 });
   const range = result.issueRanges.find((item) => item.kind === "clipped-text" && item.elements[0]?.selector === "#clipped");
   assert.deepEqual([range.from, range.to, range.occurrences], [320, 400, 2]);
+  assert.equal(range.cleanAfter, 480);
 });
 
 test("adaptive refinement spends budget across separate transition bands", async (context) => {

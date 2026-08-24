@@ -88,13 +88,15 @@ function validateCompatibility(
   if (baseline.range.min !== candidate.range.min || baseline.range.max !== candidate.range.max || baseline.range.height !== candidate.range.height) {
     errors.push({ code: "range-mismatch", message: `Scan ranges differ: baseline is ${baseline.range.min}–${baseline.range.max}×${baseline.range.height}, candidate is ${candidate.range.min}–${candidate.range.max}×${candidate.range.height}.` });
   }
-  const environmentKeys = ["browser", "platform", "packageVersion"] as const;
+  const environmentKeys = ["browser", "platform"] as const;
   const changedEnvironment = environmentKeys.filter((key) => baseline.environment[key] !== candidate.environment[key]);
   if (changedEnvironment.length) {
     errors.push({ code: "environment-mismatch", message: `Rendering environments differ in: ${changedEnvironment.join(", ")}.` });
   }
-  const captureKeys = ["mode", "screenshot", "imageFormat", "scrollSweep", "reloadPerWidth", "pageReady", "readinessKey"] as const;
-  const changedCapture = !baseline.capture || !candidate.capture ? captureKeys : captureKeys.filter((key) => baseline.capture[key] !== candidate.capture[key]);
+  const captureKeys = ["protocolVersion", "mode", "screenshot", "imageFormat", "imageQuality", "scrollSweep", "maxScrollSteps", "settleMs", "reloadPerWidth", "hideSelectors", "deviceScaleFactor", "colorScheme", "reducedMotion", "locale", "timezoneId", "pageReady", "readinessKey"] as const;
+  const changedCapture = !baseline.capture || !candidate.capture
+    ? captureKeys
+    : captureKeys.filter((key) => JSON.stringify(baseline.capture[key]) !== JSON.stringify(candidate.capture[key]));
   if (changedCapture.length) {
     errors.push({ code: "capture-mismatch", message: `Capture settings differ or are missing in: ${changedCapture.join(", ")}.` });
   }

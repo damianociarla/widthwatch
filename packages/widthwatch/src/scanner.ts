@@ -34,7 +34,8 @@ interface ResolvedScanOptions {
   headless: boolean;
   blockResourceTypes: string[];
   hideSelectors: string[];
-  maxRequests: number;
+  maxRequestsPerNavigation: number;
+  maxTotalRequests: number;
   proxyServer: string | undefined;
   allowedUrl: ScanOptions["allowedUrl"] | undefined;
 }
@@ -61,7 +62,8 @@ const defaults: Omit<ResolvedScanOptions, "allowedUrl" | "exactWidths" | "pageRe
   headless: true,
   blockResourceTypes: ["media"],
   hideSelectors: [] as string[],
-  maxRequests: 500,
+  maxRequestsPerNavigation: 500,
+  maxTotalRequests: 5_000,
   proxyServer: undefined,
 };
 
@@ -84,6 +86,8 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
     readinessKey: options.readinessKey,
     allowedUrl: options.allowedUrl,
     proxyServer: options.proxyServer,
+    maxRequestsPerNavigation: options.maxRequestsPerNavigation ?? options.maxRequests ?? defaults.maxRequestsPerNavigation,
+    maxTotalRequests: options.maxTotalRequests ?? options.maxRequests ?? defaults.maxTotalRequests,
   };
   validateOptions(config);
   const normalizedUrl = normalizeUrl(url);
@@ -97,18 +101,21 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
       viewport: { width: config.minWidth, height: config.viewportHeight },
       reducedMotion: "reduce",
       colorScheme: "light",
+      deviceScaleFactor: 1,
+      locale: "en-US",
+      timezoneId: "UTC",
       serviceWorkers: "block",
     });
-    await installNetworkPolicy(context, config);
+    const requestBudget = await installNetworkPolicy(context, config);
     const page = await context.newPage();
-    if (!config.reloadPerWidth) await navigate(page, normalizedUrl, config);
+    if (!config.reloadPerWidth) await navigate(page, normalizedUrl, config, requestBudget);
 
     const frames = new Map<number, LayoutFrame>();
     const refinementsByBand = new Map<number, number>();
     const initialWidths = config.exactWidths ?? seedWidths(config.minWidth, config.maxWidth, config.initialStep);
     for (const width of initialWidths) {
       if (!config.exactWidths && frames.size >= config.maxSamples) break;
-      frames.set(width, await captureFrame(page, normalizedUrl, width, config));
+      frames.set(width, await captureFrame(page, normalizedUrl, width, config, requestBudget));
     }
 
     while (!config.exactWidths && frames.size < config.maxSamples) {
@@ -132,7 +139,7 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
       }
       const next = candidates.sort((a, b) => b.priority - a.priority || b.span - a.span || a.width - b.width)[0];
       if (!next || frames.has(next.width)) break;
-      frames.set(next.width, await captureFrame(page, normalizedUrl, next.width, config));
+      frames.set(next.width, await captureFrame(page, normalizedUrl, next.width, config, requestBudget));
       refinementsByBand.set(next.band, (refinementsByBand.get(next.band) ?? 0) + 1);
     }
 
@@ -149,11 +156,21 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
       range: { min: config.minWidth, max: config.maxWidth, height: config.viewportHeight },
       environment: { browser: `Chromium ${browser.version()}`, platform: process.platform, packageVersion: PACKAGE_VERSION },
       capture: {
+        protocolVersion: 1,
         mode: config.mode,
         screenshot: config.screenshot,
         imageFormat: config.imageFormat,
+        imageQuality: config.imageQuality,
         scrollSweep: config.scrollSweep,
+        maxScrollSteps: config.maxScrollSteps,
+        settleMs: config.settleMs,
         reloadPerWidth: config.reloadPerWidth,
+        hideSelectors: [...config.hideSelectors].sort(),
+        deviceScaleFactor: 1,
+        colorScheme: "light",
+        reducedMotion: "reduce",
+        locale: "en-US",
+        timezoneId: "UTC",
         pageReady: Boolean(config.pageReady),
         readinessKey: config.readinessKey ?? null,
       },
@@ -177,20 +194,46 @@ export function scanAtWidths(url: string, widths: number[], options: Omit<ScanOp
   return scanResponsive(url, { ...options, exactWidths: widths });
 }
 
-async function installNetworkPolicy(context: BrowserContext, config: ResolvedScanOptions): Promise<void> {
-  let requestCount = 0;
-  await context.route("**/*", async (route) => {
-    const request = route.request();
-    requestCount += 1;
-    if (requestCount > config.maxRequests) return route.abort("blockedbyclient");
-    if (config.blockResourceTypes.includes(request.resourceType())) return route.abort("blockedbyclient");
-    if (config.allowedUrl && !(await config.allowedUrl(request.url()))) return route.abort("blockedbyclient");
-    return route.continue();
-  });
+interface RequestBudget {
+  perNavigation: number;
+  total: number;
+  error?: Error;
 }
 
-async function navigate(page: Page, url: string, config: ResolvedScanOptions): Promise<void> {
-  await page.goto(url, { waitUntil: "domcontentloaded", timeout: config.timeoutMs });
+async function installNetworkPolicy(context: BrowserContext, config: ResolvedScanOptions): Promise<RequestBudget> {
+  const budget: RequestBudget = { perNavigation: 0, total: 0 };
+  await context.route("**/*", async (route) => {
+    const request = route.request();
+    if (config.blockResourceTypes.includes(request.resourceType())) return route.abort("blockedbyclient");
+    if (config.allowedUrl && !(await config.allowedUrl(request.url()))) return route.abort("blockedbyclient");
+    if (request.isNavigationRequest() && request.resourceType() === "document" && request.frame() === request.frame().page().mainFrame()) budget.perNavigation = 0;
+    budget.perNavigation += 1;
+    budget.total += 1;
+    if (budget.perNavigation > config.maxRequestsPerNavigation) {
+      budget.error = new Error(`request budget exceeded for one navigation (${config.maxRequestsPerNavigation} allowed requests). Increase maxRequestsPerNavigation.`);
+      return route.abort("blockedbyclient");
+    }
+    if (budget.total > config.maxTotalRequests) {
+      budget.error = new Error(`total request budget exceeded (${config.maxTotalRequests} allowed requests). Increase maxTotalRequests.`);
+      return route.abort("blockedbyclient");
+    }
+    return route.continue();
+  });
+  return budget;
+}
+
+async function navigate(page: Page, url: string, config: ResolvedScanOptions, budget: RequestBudget): Promise<void> {
+  try {
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: config.timeoutMs });
+  } catch (error) {
+    if (budget.error) throw new Error(`WidthWatch ${budget.error.message}`, { cause: error });
+    throw error;
+  }
+  assertRequestBudget(budget);
+}
+
+function assertRequestBudget(budget: RequestBudget): void {
+  if (budget.error) throw new Error(`WidthWatch ${budget.error.message}`);
 }
 
 async function preparePage(page: Page, url: string, width: number, config: ResolvedScanOptions): Promise<void> {
@@ -251,11 +294,12 @@ async function withTimeout<T>(operation: Promise<T>, timeoutMs: number, label: s
   }
 }
 
-async function captureFrame(page: Page, url: string, width: number, config: ResolvedScanOptions): Promise<LayoutFrame> {
+async function captureFrame(page: Page, url: string, width: number, config: ResolvedScanOptions, budget: RequestBudget): Promise<LayoutFrame> {
   const started = Date.now();
   await page.setViewportSize({ width, height: config.viewportHeight });
-  if (config.reloadPerWidth) await navigate(page, url, config);
+  if (config.reloadPerWidth) await navigate(page, url, config, budget);
   await preparePage(page, url, width, config);
+  assertRequestBudget(budget);
   const probe = await page.evaluate(probePage, { width, maxElements: config.maxElements, maxDomNodes: config.maxDomNodes });
   const screenshot = config.imageFormat === "jpeg"
     ? await page.screenshot({ fullPage: config.screenshot === "full-page", type: "jpeg", quality: config.imageQuality, animations: "disabled" })
@@ -450,7 +494,8 @@ function validateOptions(config: ResolvedScanOptions): void {
   if (!finiteInteger(config.settleMs) || config.settleMs < 0 || config.settleMs > 30_000) throw new Error("settleMs must be a whole number between 0 and 30000.");
   if (!finiteInteger(config.maxScrollSteps) || config.maxScrollSteps < 1 || config.maxScrollSteps > 100) throw new Error("maxScrollSteps must be a whole number between 1 and 100.");
   if (!finiteInteger(config.pageReadyTimeoutMs) || config.pageReadyTimeoutMs < 1 || config.pageReadyTimeoutMs > 300_000) throw new Error("pageReadyTimeoutMs must be a whole number between 1 and 300000.");
-  if (!finiteInteger(config.maxRequests) || config.maxRequests < 1 || config.maxRequests > 10_000) throw new Error("maxRequests must be a whole number between 1 and 10000.");
+  if (!finiteInteger(config.maxRequestsPerNavigation) || config.maxRequestsPerNavigation < 1 || config.maxRequestsPerNavigation > 10_000) throw new Error("maxRequestsPerNavigation must be a whole number between 1 and 10000.");
+  if (!finiteInteger(config.maxTotalRequests) || config.maxTotalRequests < 1 || config.maxTotalRequests > 100_000) throw new Error("maxTotalRequests must be a whole number between 1 and 100000.");
   if (config.exactWidths) {
     if (config.exactWidths.length < 1 || config.exactWidths.length > 100) throw new Error("exactWidths must contain between 1 and 100 widths.");
     if (config.exactWidths.some((width) => !finiteInteger(width) || width < 240 || width > 3840)) throw new Error("exactWidths must contain whole pixels between 240 and 3840.");

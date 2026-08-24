@@ -1,3 +1,5 @@
+import type { ScanOptions } from "./types.js";
+
 export interface ParsedCliOptions {
   command: "scan" | "init";
   url?: string;
@@ -10,7 +12,7 @@ export interface ParsedCliOptions {
   maxSamples?: number;
   fullPage: boolean;
   layoutOnly: boolean;
-  reloadPerWidth: boolean;
+  reloadPerWidth?: true;
   failOnRegression: boolean;
   help: boolean;
   version: boolean;
@@ -31,7 +33,6 @@ export function parseCliOptions(args: string[]): ParsedCliOptions {
     command: args[0] === "init" ? "init" : "scan",
     fullPage: false,
     layoutOnly: false,
-    reloadPerWidth: false,
     failOnRegression: false,
     help: false,
     version: false,
@@ -59,4 +60,16 @@ export function parseCliOptions(args: string[]): ParsedCliOptions {
     parsed.url = argument;
   }
   return parsed;
+}
+
+export function applyCliScanOptions(configured: ScanOptions | undefined, parsed: ParsedCliOptions): ScanOptions {
+  const scanOptions: ScanOptions = { ...configured };
+  if (parsed.minWidth !== undefined) scanOptions.minWidth = parsed.minWidth;
+  if (parsed.maxWidth !== undefined) scanOptions.maxWidth = parsed.maxWidth;
+  if (parsed.maxSamples !== undefined) scanOptions.maxSamples = parsed.maxSamples;
+  if (parsed.layoutOnly) scanOptions.mode = "layout";
+  if (parsed.reloadPerWidth) scanOptions.reloadPerWidth = true;
+  else if (!parsed.layoutOnly && configured?.reloadPerWidth === undefined) scanOptions.reloadPerWidth = true;
+  if (parsed.fullPage) scanOptions.screenshot = "full-page";
+  return scanOptions;
 }

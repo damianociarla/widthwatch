@@ -41,6 +41,21 @@ export class ReportStore {
   }
 }
 
+export async function persistReportBestEffort(
+  store: Pick<ReportStore, "put">,
+  id: string,
+  html: string,
+  onError: (error: unknown) => void = (error) => console.error("WidthWatch report persistence failed:", error),
+): Promise<boolean> {
+  try {
+    await store.put(id, html);
+    return true;
+  } catch (error) {
+    onError(error);
+    return false;
+  }
+}
+
 function keyFor(id: string): string {
   if (!/^[a-f0-9-]+$/.test(id)) throw new Error("Invalid report id.");
   return `reports/${id}.html`;

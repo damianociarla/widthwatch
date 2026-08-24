@@ -42,6 +42,8 @@ export interface ResponsiveIssueRange {
   to: number;
   sampledWidths: number[];
   occurrences: number;
+  cleanBefore?: number;
+  cleanAfter?: number;
   message: string;
   elements: ElementRef[];
 }
@@ -72,11 +74,21 @@ export interface WidthWatchReport {
   range: { min: number; max: number; height: number };
   environment: { browser: string; platform: string; packageVersion: string };
   capture: {
+    protocolVersion: number;
     mode: "layout" | "visual";
     screenshot: "viewport" | "full-page";
     imageFormat?: "png" | "jpeg";
+    imageQuality: number;
     scrollSweep: boolean;
+    maxScrollSteps: number;
+    settleMs: number;
     reloadPerWidth: boolean;
+    hideSelectors: string[];
+    deviceScaleFactor: number;
+    colorScheme: "light" | "dark" | "no-preference";
+    reducedMotion: "reduce" | "no-preference";
+    locale: string;
+    timezoneId: string;
     pageReady: boolean;
     readinessKey: string | null;
   };
@@ -149,7 +161,10 @@ export interface ScanOptions {
   headless?: boolean;
   blockResourceTypes?: string[];
   hideSelectors?: string[];
+  /** @deprecated Use maxRequestsPerNavigation and maxTotalRequests. */
   maxRequests?: number;
+  maxRequestsPerNavigation?: number;
+  maxTotalRequests?: number;
   proxyServer?: string;
   allowedUrl?: (url: string) => boolean | Promise<boolean>;
 }

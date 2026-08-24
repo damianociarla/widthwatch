@@ -30,15 +30,26 @@ async function copyText(value: string): Promise<void> {
 
 const navToggle = document.querySelector<HTMLButtonElement>("#navToggle");
 const primaryNav = document.querySelector<HTMLElement>("#primaryNav");
+const closeNavigation = (returnFocus = false) => {
+  navToggle?.setAttribute("aria-expanded", "false");
+  primaryNav?.removeAttribute("data-open");
+  if (returnFocus) navToggle?.focus();
+};
 navToggle?.addEventListener("click", () => {
   const expanded = navToggle.getAttribute("aria-expanded") === "true";
   navToggle.setAttribute("aria-expanded", String(!expanded));
   primaryNav?.toggleAttribute("data-open", !expanded);
+  if (!expanded) primaryNav?.querySelector<HTMLAnchorElement>("a")?.focus();
 });
-primaryNav?.querySelectorAll("a").forEach((link) => link.addEventListener("click", () => {
-  navToggle?.setAttribute("aria-expanded", "false");
-  primaryNav.removeAttribute("data-open");
-}));
+primaryNav?.querySelectorAll("a").forEach((link) => link.addEventListener("click", () => closeNavigation()));
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && navToggle?.getAttribute("aria-expanded") === "true") closeNavigation(true);
+});
+document.addEventListener("pointerdown", (event) => {
+  const target = event.target as Node;
+  if (navToggle?.getAttribute("aria-expanded") === "true" && !navToggle.contains(target) && !primaryNav?.contains(target)) closeNavigation();
+});
+matchMedia("(min-width: 901px)").addEventListener("change", (event) => { if (event.matches) closeNavigation(); });
 
 const heroWidth = document.querySelector<HTMLElement>("#heroWidth");
 if (heroWidth && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -49,12 +60,6 @@ if (heroWidth && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
   };
   requestAnimationFrame(animate);
 }
-
-const observer = new IntersectionObserver((entries) => {
-  for (const entry of entries) if (entry.isIntersecting) entry.target.classList.add("visible");
-}, { threshold: 0.18 });
-document.documentElement.classList.add("motion-ready");
-document.querySelectorAll(".reveal").forEach((element) => observer.observe(element));
 
 const form = document.querySelector<HTMLFormElement>("#scanForm");
 const state = document.querySelector<HTMLElement>("#scanState");
