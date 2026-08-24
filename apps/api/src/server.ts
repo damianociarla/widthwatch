@@ -3,9 +3,10 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { generateHtmlReport, scanResponsive, type WidthWatchReport } from "widthwatch";
 import { startPinnedEgressProxy } from "./egress-proxy.js";
 import { assertPublicUrl, resolvePublicTarget, UnsafeUrlError } from "./network-policy.js";
+import { holdConnectionUntilSettled, scanStatusPayload, type HostedScanStatus } from "./scan-response.js";
 import { consumeRateLimits, SlidingWindowLimiter } from "./security.js";
 
-type Job = { id: string; url: string; createdAt: number; status: "queued" | "running" | "complete" | "failed"; report?: WidthWatchReport; error?: string };
+type Job = { id: string; url: string; createdAt: number; status: HostedScanStatus; report?: WidthWatchReport; error?: string };
 const jobs = new Map<string, Job>();
 const queue: Job[] = [];
 const clientLimit = new SlidingWindowLimiter(Number(process.env.RATE_LIMIT_PER_10_MINUTES ?? 2), 600_000);
@@ -39,7 +40,8 @@ async function createScan(request: IncomingMessage, response: ServerResponse): P
     if (!consumeRateLimits([{ limiter: clientLimit, key: client }, { limiter: targetLimit, key: target.hostname }, { limiter: globalLimit, key: "global" }])) return json(response, 429, { error: "rate_limited", retryAfterSeconds: 600 });
     const job: Job = { id: randomUUID(), url: target.toString(), createdAt: Date.now(), status: "queued" };
     jobs.set(job.id, job); queue.push(job); void drain();
-    json(response, 202, { id: job.id, status: job.status, pollUrl: `/v1/scans/${job.id}` });
+    await holdConnectionUntilSettled(job, Number(process.env.INITIAL_RESPONSE_WAIT_MS ?? 20_000));
+    json(response, 202, { ...scanStatusPayload(job), pollUrl: `/v1/scans/${job.id}` });
   } catch (error) {
     json(response, error instanceof UnsafeUrlError ? 400 : 500, { error: error instanceof UnsafeUrlError ? "unsafe_url" : "internal_error" });
   }
@@ -48,12 +50,7 @@ async function createScan(request: IncomingMessage, response: ServerResponse): P
 function getScan(id: string, response: ServerResponse): void {
   const job = jobs.get(id);
   if (!job) return json(response, 404, { error: "not_found" });
-  json(response, 200, {
-    id: job.id,
-    status: job.status,
-    ...(job.report ? { report: job.report, reportUrl: `/v1/reports/${job.id}` } : {}),
-    ...(job.error ? { error: job.error } : {}),
-  });
+  json(response, 200, scanStatusPayload(job));
 }
 
 function getReport(id: string, response: ServerResponse): void {

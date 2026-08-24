@@ -40,21 +40,25 @@ form?.addEventListener("submit", async (event) => {
   timeline.innerHTML = "";
   if (reportLink) reportLink.hidden = true;
   const apiUrl = import.meta.env.VITE_API_URL as string | undefined;
+  const scanStarted = performance.now();
   try {
     if (apiUrl) {
       const response = await fetch(`${apiUrl.replace(/\/$/, "")}/v1/scans`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url }) });
       if (!response.ok) throw new Error(response.status === 429 ? "The public demo limit has been reached. Try the local package." : "The scan could not be accepted.");
-      const job = await response.json() as { id: string };
-      state.textContent = "● queued";
-      message.textContent = `Scan ${job.id.slice(0, 8)} accepted. Waiting for the bounded worker…`;
+      const job = await response.json() as { id: string; status: string };
+      state.textContent = `● ${job.status}`;
+      message.textContent = job.status === "complete" ? "Scan complete. Preparing the interactive report…" : `Scan ${job.id.slice(0, 8)} accepted. Waiting for the bounded worker…`;
       for (let attempt = 0; attempt < 45; attempt += 1) {
-        await new Promise((resolve) => window.setTimeout(resolve, 2_000));
         const statusResponse = await fetch(`${apiUrl.replace(/\/$/, "")}/v1/scans/${job.id}`);
         if (!statusResponse.ok) throw new Error("The scan result is no longer available.");
         const result = await statusResponse.json() as { status: string; error?: string; reportUrl?: string; report?: { frames: Array<{ width: number; issues: Array<{ severity: string }> }>; summary: { errors: number; warnings: number } } };
         state.textContent = `● ${result.status}`;
         if (result.status === "failed") throw new Error(result.error ?? "The bounded scan could not complete.");
-        if (result.status !== "complete" || !result.report) { message.textContent = `Scanning public page · ${attempt + 1}s elapsed`; continue; }
+        if (result.status !== "complete" || !result.report) {
+          message.textContent = `Scanning public page · ${Math.round((performance.now() - scanStarted) / 1_000)}s elapsed`;
+          await new Promise((resolve) => window.setTimeout(resolve, 2_000));
+          continue;
+        }
         timeline.innerHTML = "";
         for (const frame of result.report.frames) {
           const mark = document.createElement("i");

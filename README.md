@@ -91,7 +91,7 @@ npm start --workspace @widthwatch/api
 
 ## Public demo limits
 
-The hosted surface is intentionally not the local package in the cloud. It accepts one credential-free public page, uses 12 adaptive widths, blocks media, caps navigation at 15 seconds and 250 requests, admits at most three queued jobs, runs one browser, and exposes a shareable interactive report for 30 minutes. Separate client, target, global, CloudFront/WAF and compute limits prevent arbitrary scale-out.
+The hosted surface is intentionally not the local package in the cloud. It accepts one credential-free public page, uses 12 adaptive widths, blocks media, caps navigation at 15 seconds and 250 requests, admits at most three queued jobs, runs one browser, and exposes a shareable interactive report for 30 minutes. The admission request stays open while the browser works so App Runner does not throttle detached CPU, while status polling returns lightweight metadata rather than embedded screenshots. Separate client, target, global, CloudFront/WAF and compute limits prevent arbitrary scale-out.
 
 See [architecture](docs/architecture.md), [OpenAPI](docs/openapi.yml), and [security policy](SECURITY.md).
 

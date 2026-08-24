@@ -8,6 +8,8 @@
 
 Completed demo scans expose the same standalone reporter used by the npm package at `/v1/reports/{id}`. The URL is shareable but intentionally ephemeral: the in-memory report expires after 30 minutes and disappears on a worker restart. Persistent team history belongs in the authenticated product tier, backed by object storage rather than the public demo.
 
+The scan admission response remains open while the in-process browser is active. App Runner otherwise throttles CPU after returning the `202`, which makes detached background browser work unsuitable. Poll responses contain only timeline metadata; screenshots stay in the dedicated HTML report endpoint.
+
 The package remains the product. The hosted demo is a constrained preview, not a free remote browser farm.
 
 ## Continuous-width engine

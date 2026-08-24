@@ -19,7 +19,7 @@ paths:
               required: [url]
               properties: { url: { type: string, format: uri, maxLength: 2000 } }
       responses:
-        "202": { description: Accepted }
+        "202": { description: Accepted; the connection may remain open briefly so App Runner keeps CPU allocated while the bounded scan runs }
         "400": { description: Invalid or unsafe URL }
         "429": { description: Client, target, or global quota reached }
         "503": { description: Hard capacity limit reached }
@@ -28,7 +28,7 @@ paths:
       operationId: getScan
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
       responses:
-        "200": { description: Job status, optional report, and hosted report URL }
+        "200": { description: Job status, optional lightweight timeline metadata without screenshots, and hosted report URL }
         "404": { description: Unknown or expired job }
   /v1/reports/{id}:
     get:
