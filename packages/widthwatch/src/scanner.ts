@@ -218,7 +218,9 @@ async function preparePage(page: Page, url: string, width: number, config: Resol
 
 async function scrollSweep(page: Page, maxSteps: number, settleMs: number): Promise<void> {
   await page.evaluate(async ({ maxSteps, stepDelay }) => {
-    const wait = () => new Promise<void>((resolve) => window.setTimeout(resolve, stepDelay));
+    const wait = () => new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => window.requestAnimationFrame(() => window.setTimeout(resolve, stepDelay)));
+    });
     const maxY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
     const step = maxY ? Math.max(1, Math.ceil(maxY / maxSteps)) : 1;
     for (let y = 0; y < maxY; y += step) {
