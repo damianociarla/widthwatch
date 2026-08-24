@@ -20,6 +20,8 @@ The engine returns versioned TypeScript objects, renders a portable interactive 
 - document and element overflow detection;
 - clipped-text and material leaf-overlap detection;
 - layout discontinuity signals;
+- full-page visual mode with bounded scroll sweep and lazy-content activation;
+- optional reload-per-width and application-specific Playwright readiness hook;
 - PNG pixel comparison with candidate/baseline regression output;
 - CLI, TypeScript API and native standalone HTML reporter;
 - product website, documentation and bounded public-scanner UI;
@@ -42,8 +44,12 @@ const candidate: WidthWatchReport = await scanAtWidths(
   "http://localhost:4173",
   baseline.frames.map((frame) => frame.width),
   {
-  viewportHeight: baseline.range.height,
-  hideSelectors: ["[data-live-clock]"],
+    viewportHeight: baseline.range.height,
+    mode: "visual",
+    reloadPerWidth: true,
+    pageReady: (page) => page.waitForSelector("[data-app-ready]"),
+    readinessKey: "app-ready-v1",
+    hideSelectors: ["[data-live-clock]"],
   },
 );
 
@@ -68,6 +74,8 @@ node packages/widthwatch/dist/cli.js "$CANDIDATE_URL" \
 ```
 
 Baseline and candidate must run in the same pinned browser container. Browser rendering can vary by operating system, fonts, browser version and other host details; a visual threshold cannot compensate for unrelated environments.
+
+The CLI uses correctness-first visual capture and reloads each width. For a fast diagnostic probe that only inspects the viewport, use `--layout-only`; add `--reload-per-width` when a layout-only application calculates responsive state only during startup.
 
 ## Repository
 

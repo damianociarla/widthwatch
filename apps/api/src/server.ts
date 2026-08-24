@@ -5,6 +5,7 @@ import { startPinnedEgressProxy } from "./egress-proxy.js";
 import { assertPublicUrl, resolvePublicTarget, UnsafeUrlError } from "./network-policy.js";
 import { holdConnectionUntilSettled, scanStatusPayload, type HostedScanStatus } from "./scan-response.js";
 import { consumeRateLimits, SlidingWindowLimiter } from "./security.js";
+import { API_VERSION } from "./version.js";
 
 type Job = { id: string; url: string; createdAt: number; status: HostedScanStatus; report?: WidthWatchReport; error?: string };
 const jobs = new Map<string, Job>();
@@ -20,7 +21,7 @@ let running = false;
 const server = createServer(async (request, response) => {
   setCors(request, response);
   if (request.method === "OPTIONS") return void response.writeHead(204).end();
-  if (request.url === "/health" && request.method === "GET") return json(response, 200, { ok: true, version: "0.1.0" });
+  if (request.url === "/health" && request.method === "GET") return json(response, 200, { ok: true, version: API_VERSION });
   if (!validOriginToken(request)) return json(response, 404, { error: "not_found" });
   if (request.url === "/v1/scans" && request.method === "POST") return void createScan(request, response);
   const match = request.method === "GET" ? request.url?.match(/^\/v1\/scans\/([a-f0-9-]+)$/) : null;
@@ -78,7 +79,7 @@ async function drain(): Promise<void> {
     const job = queue.shift()!; job.status = "running";
     try {
       job.report = await scanResponsive(job.url, {
-        minWidth: 320, maxWidth: 1440, viewportHeight: 800, initialStep: 224, minStep: 24, maxSamples: 8,
+        mode: "layout", minWidth: 320, maxWidth: 1440, viewportHeight: 800, initialStep: 224, minStep: 24, maxSamples: 8,
         maxElements: 350, timeoutMs: 15_000, settleMs: 80, maxRequests: 250, blockResourceTypes: ["media", "websocket"],
         proxyServer: proxy.url, allowedUrl: async (url) => resolvePublicTarget(url).then(() => true, () => false),
       });

@@ -1,3 +1,5 @@
+import type { Page } from "playwright";
+
 export type Severity = "info" | "warning" | "error";
 
 export type IssueKind =
@@ -57,6 +59,14 @@ export interface WidthWatchReport {
   durationMs: number;
   range: { min: number; max: number; height: number };
   environment: { browser: string; platform: string; packageVersion: string };
+  capture: {
+    mode: "layout" | "visual";
+    screenshot: "viewport" | "full-page";
+    scrollSweep: boolean;
+    reloadPerWidth: boolean;
+    pageReady: boolean;
+    readinessKey: string | null;
+  };
   frames: LayoutFrame[];
   transitions: WidthTransition[];
   summary: { errors: number; warnings: number; info: number; sampledWidths: number };
@@ -72,6 +82,7 @@ export interface VisualDiff {
 export type ComparisonErrorCode =
   | "range-mismatch"
   | "environment-mismatch"
+  | "capture-mismatch"
   | "duplicate-width"
   | "missing-candidate-frame"
   | "unexpected-candidate-frame"
@@ -97,6 +108,7 @@ export interface ComparisonReport {
 }
 
 export interface ScanOptions {
+  mode?: "layout" | "visual";
   exactWidths?: number[];
   minWidth?: number;
   maxWidth?: number;
@@ -105,8 +117,15 @@ export interface ScanOptions {
   minStep?: number;
   maxSamples?: number;
   maxElements?: number;
+  maxDomNodes?: number;
   timeoutMs?: number;
   settleMs?: number;
+  scrollSweep?: boolean;
+  maxScrollSteps?: number;
+  reloadPerWidth?: boolean;
+  pageReady?: (page: Page, context: { url: string; width: number }) => void | Promise<void>;
+  readinessKey?: string;
+  pageReadyTimeoutMs?: number;
   screenshot?: "viewport" | "full-page";
   headless?: boolean;
   blockResourceTypes?: string[];

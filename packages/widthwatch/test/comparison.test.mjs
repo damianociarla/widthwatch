@@ -27,6 +27,7 @@ function report(widths, overrides = {}) {
     durationMs: 1,
     range: { min: Math.min(...widths), max: Math.max(...widths), height: 800 },
     environment: { browser: "Chromium 1", platform: "linux", packageVersion: "0.1.0" },
+    capture: { mode: "visual", screenshot: "full-page", scrollSweep: true, reloadPerWidth: false, pageReady: false, readinessKey: null },
     frames,
     transitions: [],
     summary: { errors: 0, warnings: 0, info: 0, sampledWidths: frames.length },
@@ -66,4 +67,21 @@ test("different rendering environments fail closed", () => {
   assert.equal(comparison.valid, false);
   assert.equal(comparison.passed, false);
   assert.equal(comparison.validationErrors[0].code, "environment-mismatch");
+});
+
+test("different capture modes fail closed", () => {
+  const baseline = report([320]);
+  const candidate = report([320], { capture: { mode: "layout", screenshot: "viewport", scrollSweep: false, reloadPerWidth: false, pageReady: false, readinessKey: null } });
+  const comparison = compareReports(baseline, candidate);
+  assert.equal(comparison.valid, false);
+  assert.equal(comparison.passed, false);
+  assert.equal(comparison.validationErrors[0].code, "capture-mismatch");
+});
+
+test("different readiness keys fail closed", () => {
+  const baseline = report([320], { capture: { mode: "visual", screenshot: "full-page", scrollSweep: true, reloadPerWidth: true, pageReady: true, readinessKey: "ready-v1" } });
+  const candidate = report([320], { capture: { mode: "visual", screenshot: "full-page", scrollSweep: true, reloadPerWidth: true, pageReady: true, readinessKey: "ready-v2" } });
+  const comparison = compareReports(baseline, candidate);
+  assert.equal(comparison.valid, false);
+  assert.match(comparison.validationErrors[0].message, /readinessKey/);
 });

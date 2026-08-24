@@ -1,7 +1,6 @@
 import { chromium, type BrowserContext, type Page } from "playwright";
 import type { ElementRef, LayoutFrame, ResponsiveIssue, ScanOptions, WidthTransition, WidthWatchReport } from "./types.js";
-
-const PACKAGE_VERSION = "0.1.0";
+import { PACKAGE_VERSION } from "./version.js";
 
 interface ProbeResult {
   document: { width: number; height: number };
@@ -10,6 +9,7 @@ interface ProbeResult {
 }
 
 interface ResolvedScanOptions {
+  mode: "layout" | "visual";
   exactWidths: number[] | undefined;
   minWidth: number;
   maxWidth: number;
@@ -18,8 +18,15 @@ interface ResolvedScanOptions {
   minStep: number;
   maxSamples: number;
   maxElements: number;
+  maxDomNodes: number;
   timeoutMs: number;
   settleMs: number;
+  scrollSweep: boolean;
+  maxScrollSteps: number;
+  reloadPerWidth: boolean;
+  pageReady: ScanOptions["pageReady"] | undefined;
+  readinessKey: string | undefined;
+  pageReadyTimeoutMs: number;
   screenshot: "viewport" | "full-page";
   headless: boolean;
   blockResourceTypes: string[];
@@ -29,7 +36,8 @@ interface ResolvedScanOptions {
   allowedUrl: ScanOptions["allowedUrl"] | undefined;
 }
 
-const defaults: Omit<ResolvedScanOptions, "allowedUrl" | "exactWidths"> = {
+const defaults: Omit<ResolvedScanOptions, "allowedUrl" | "exactWidths" | "pageReady" | "readinessKey"> = {
+  mode: "visual",
   minWidth: 320,
   maxWidth: 1440,
   viewportHeight: 900,
@@ -37,9 +45,14 @@ const defaults: Omit<ResolvedScanOptions, "allowedUrl" | "exactWidths"> = {
   minStep: 8,
   maxSamples: 24,
   maxElements: 500,
+  maxDomNodes: 10_000,
   timeoutMs: 30_000,
   settleMs: 120,
-  screenshot: "viewport" as const,
+  scrollSweep: true,
+  maxScrollSteps: 20,
+  reloadPerWidth: false,
+  pageReadyTimeoutMs: 10_000,
+  screenshot: "full-page" as const,
   headless: true,
   blockResourceTypes: ["media"],
   hideSelectors: [] as string[],
@@ -50,14 +63,20 @@ const defaults: Omit<ResolvedScanOptions, "allowedUrl" | "exactWidths"> = {
 export async function scanResponsive(url: string, options: ScanOptions = {}): Promise<WidthWatchReport> {
   const requestedWidths = options.exactWidths ? [...options.exactWidths] : undefined;
   const derivableWidths = requestedWidths?.length && requestedWidths.every(Number.isFinite) ? requestedWidths : undefined;
+  const mode = options.mode ?? defaults.mode;
   const config: ResolvedScanOptions = {
     ...defaults,
     ...options,
+    mode,
+    screenshot: options.screenshot ?? (mode === "visual" ? "full-page" : "viewport"),
+    scrollSweep: options.scrollSweep ?? mode === "visual",
     ...(derivableWidths ? {
       minWidth: options.minWidth ?? Math.min(...derivableWidths),
       maxWidth: options.maxWidth ?? Math.max(...derivableWidths),
     } : {}),
     exactWidths: requestedWidths,
+    pageReady: options.pageReady,
+    readinessKey: options.readinessKey,
     allowedUrl: options.allowedUrl,
     proxyServer: options.proxyServer,
   };
@@ -77,14 +96,13 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
     });
     await installNetworkPolicy(context, config);
     const page = await context.newPage();
-    await page.goto(normalizedUrl, { waitUntil: "domcontentloaded", timeout: config.timeoutMs });
-    await stabilizePage(page, config.hideSelectors, config.settleMs);
+    if (!config.reloadPerWidth) await navigate(page, normalizedUrl, config);
 
     const frames = new Map<number, LayoutFrame>();
     const initialWidths = config.exactWidths ?? seedWidths(config.minWidth, config.maxWidth, config.initialStep);
     for (const width of initialWidths) {
       if (!config.exactWidths && frames.size >= config.maxSamples) break;
-      frames.set(width, await captureFrame(page, width, config));
+      frames.set(width, await captureFrame(page, normalizedUrl, width, config));
     }
 
     while (!config.exactWidths && frames.size < config.maxSamples) {
@@ -101,7 +119,7 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
       }
       const next = candidates.sort((a, b) => b.priority - a.priority)[0];
       if (!next || frames.has(next.width)) break;
-      frames.set(next.width, await captureFrame(page, next.width, config));
+      frames.set(next.width, await captureFrame(page, normalizedUrl, next.width, config));
     }
 
     const orderedFrames = [...frames.values()].sort((a, b) => a.width - b.width);
@@ -116,6 +134,14 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
       durationMs: Date.now() - started,
       range: { min: config.minWidth, max: config.maxWidth, height: config.viewportHeight },
       environment: { browser: `Chromium ${browser.version()}`, platform: process.platform, packageVersion: PACKAGE_VERSION },
+      capture: {
+        mode: config.mode,
+        screenshot: config.screenshot,
+        scrollSweep: config.scrollSweep,
+        reloadPerWidth: config.reloadPerWidth,
+        pageReady: Boolean(config.pageReady),
+        readinessKey: config.readinessKey ?? null,
+      },
       frames: orderedFrames,
       transitions,
       summary: {
@@ -147,22 +173,72 @@ async function installNetworkPolicy(context: BrowserContext, config: ResolvedSca
   });
 }
 
-async function stabilizePage(page: Page, hideSelectors: string[], settleMs: number): Promise<void> {
-  await page.addStyleTag({
-    content: `*,*::before,*::after{animation-delay:0s!important;animation-duration:0s!important;transition:none!important;caret-color:transparent!important}${hideSelectors.map((selector) => `${selector}{visibility:hidden!important}`).join("")}`,
-  });
-  await page.evaluate(async () => {
-    await document.fonts.ready;
-    window.scrollTo(0, 0);
-  });
-  await page.waitForTimeout(settleMs);
+async function navigate(page: Page, url: string, config: ResolvedScanOptions): Promise<void> {
+  await page.goto(url, { waitUntil: "domcontentloaded", timeout: config.timeoutMs });
 }
 
-async function captureFrame(page: Page, width: number, config: ResolvedScanOptions): Promise<LayoutFrame> {
+async function preparePage(page: Page, url: string, width: number, config: ResolvedScanOptions): Promise<void> {
+  const stabilizingCss = `*,*::before,*::after{animation-delay:0s!important;animation-duration:0s!important;transition:none!important;caret-color:transparent!important}${config.hideSelectors.map((selector) => `${selector}{visibility:hidden!important}`).join("")}`;
+  await page.evaluate((css) => {
+    let style = document.querySelector<HTMLStyleElement>("style[data-widthwatch-stability]");
+    if (!style) {
+      style = document.createElement("style");
+      style.dataset.widthwatchStability = "";
+      document.head.append(style);
+    }
+    style.textContent = css;
+  }, stabilizingCss);
+  if (config.pageReady) await withTimeout(Promise.resolve(config.pageReady(page, { url, width })), config.pageReadyTimeoutMs, "pageReady hook");
+  await page.evaluate(async () => { await document.fonts.ready; });
+  if (config.scrollSweep) await scrollSweep(page, config.maxScrollSteps, config.settleMs);
+  await page.evaluate(async (timeoutMs) => {
+    const pending = [...document.images].filter((image) => !image.complete);
+    if (pending.length) await Promise.race([
+      Promise.all(pending.map((image) => new Promise<void>((resolve) => {
+        image.addEventListener("load", () => resolve(), { once: true });
+        image.addEventListener("error", () => resolve(), { once: true });
+      }))),
+      new Promise<void>((resolve) => window.setTimeout(resolve, timeoutMs)),
+    ]);
+    window.scrollTo(0, 0);
+  }, Math.min(config.timeoutMs, 5_000));
+  await page.waitForTimeout(config.settleMs);
+}
+
+async function scrollSweep(page: Page, maxSteps: number, settleMs: number): Promise<void> {
+  await page.evaluate(async ({ maxSteps, stepDelay }) => {
+    const wait = () => new Promise<void>((resolve) => window.setTimeout(resolve, stepDelay));
+    const maxY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+    const step = maxY ? Math.max(1, Math.ceil(maxY / maxSteps)) : 1;
+    for (let y = 0; y < maxY; y += step) {
+      window.scrollTo(0, y);
+      await wait();
+    }
+    window.scrollTo(0, maxY);
+    await wait();
+    window.scrollTo(0, 0);
+    await wait();
+  }, { maxSteps, stepDelay: Math.min(50, Math.max(0, settleMs)) });
+}
+
+async function withTimeout<T>(operation: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error(`${label} exceeded ${timeoutMs}ms.`)), timeoutMs); }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function captureFrame(page: Page, url: string, width: number, config: ResolvedScanOptions): Promise<LayoutFrame> {
   const started = Date.now();
   await page.setViewportSize({ width, height: config.viewportHeight });
-  await page.waitForTimeout(config.settleMs);
-  const probe = await page.evaluate(probePage, { width, maxElements: config.maxElements });
+  if (config.reloadPerWidth) await navigate(page, url, config);
+  await preparePage(page, url, width, config);
+  const probe = await page.evaluate(probePage, { width, maxElements: config.maxElements, maxDomNodes: config.maxDomNodes });
   const screenshot = await page.screenshot({ fullPage: config.screenshot === "full-page", type: "png", animations: "disabled" });
   return {
     width,
@@ -175,7 +251,7 @@ async function captureFrame(page: Page, width: number, config: ResolvedScanOptio
   };
 }
 
-function probePage(input: { width: number; maxElements: number }): ProbeResult {
+function probePage(input: { width: number; maxElements: number; maxDomNodes: number }): ProbeResult {
   type Snap = ElementRef & { element: Element; clientWidth: number; clientHeight: number; scrollWidth: number; scrollHeight: number; overflowX: string; overflowY: string };
   const round = (value: number) => Math.round(value * 10) / 10;
   const visible = (element: Element, rect: DOMRect, style: CSSStyleDeclaration) =>
@@ -214,9 +290,10 @@ function probePage(input: { width: number; maxElements: number }): ProbeResult {
     ...(metrics ? { metrics } : {}),
   });
 
-  const all = [...document.querySelectorAll("body *")].slice(0, input.maxElements);
+  const all = [...document.querySelectorAll("body *")].slice(0, input.maxDomNodes);
   const snaps: Snap[] = [];
   for (const element of all) {
+    if (snaps.length >= input.maxElements) break;
     if (element.closest("[data-widthwatch-ignore]")) continue;
     const rect = element.getBoundingClientRect();
     const style = getComputedStyle(element);
@@ -332,14 +409,25 @@ function normalizeUrl(value: string): string {
 
 function validateOptions(config: ResolvedScanOptions): void {
   const finiteInteger = (value: number) => Number.isFinite(value) && Number.isInteger(value);
+  if (!(["layout", "visual"] as const).includes(config.mode)) throw new Error("mode must be layout or visual.");
+  if (!(["viewport", "full-page"] as const).includes(config.screenshot)) throw new Error("screenshot must be viewport or full-page.");
+  if (typeof config.scrollSweep !== "boolean" || typeof config.reloadPerWidth !== "boolean" || typeof config.headless !== "boolean") throw new Error("scrollSweep, reloadPerWidth and headless must be booleans.");
+  if (config.pageReady !== undefined && typeof config.pageReady !== "function") throw new Error("pageReady must be a function.");
+  if (config.pageReady && (typeof config.readinessKey !== "string" || !config.readinessKey.trim())) throw new Error("readinessKey is required when pageReady is configured.");
+  if (!config.pageReady && config.readinessKey !== undefined) throw new Error("readinessKey requires pageReady.");
+  if (!Array.isArray(config.hideSelectors) || config.hideSelectors.some((selector) => typeof selector !== "string")) throw new Error("hideSelectors must be an array of strings.");
+  if (!Array.isArray(config.blockResourceTypes) || config.blockResourceTypes.some((type) => typeof type !== "string")) throw new Error("blockResourceTypes must be an array of strings.");
   if (!finiteInteger(config.minWidth) || !finiteInteger(config.maxWidth) || config.minWidth < 240 || config.maxWidth > 3840 || (config.exactWidths ? config.minWidth > config.maxWidth : config.minWidth >= config.maxWidth)) throw new Error("Width range must use whole pixels between 240px and 3840px.");
   if (!finiteInteger(config.viewportHeight) || config.viewportHeight < 240 || config.viewportHeight > 4320) throw new Error("viewportHeight must be a whole number between 240 and 4320.");
   if (!finiteInteger(config.initialStep) || config.initialStep < 1 || config.initialStep > 3840) throw new Error("initialStep must be a whole number between 1 and 3840.");
   if (!finiteInteger(config.minStep) || config.minStep < 1 || config.minStep > 3840) throw new Error("minStep must be a whole number between 1 and 3840.");
   if (!finiteInteger(config.maxSamples) || config.maxSamples < 2 || config.maxSamples > 100) throw new Error("maxSamples must be a whole number between 2 and 100.");
   if (!finiteInteger(config.maxElements) || config.maxElements < 1 || config.maxElements > 10_000) throw new Error("maxElements must be a whole number between 1 and 10000.");
+  if (!finiteInteger(config.maxDomNodes) || config.maxDomNodes < config.maxElements || config.maxDomNodes > 100_000) throw new Error("maxDomNodes must be a whole number between maxElements and 100000.");
   if (!finiteInteger(config.timeoutMs) || config.timeoutMs < 1 || config.timeoutMs > 300_000) throw new Error("timeoutMs must be a whole number between 1 and 300000.");
   if (!finiteInteger(config.settleMs) || config.settleMs < 0 || config.settleMs > 30_000) throw new Error("settleMs must be a whole number between 0 and 30000.");
+  if (!finiteInteger(config.maxScrollSteps) || config.maxScrollSteps < 1 || config.maxScrollSteps > 100) throw new Error("maxScrollSteps must be a whole number between 1 and 100.");
+  if (!finiteInteger(config.pageReadyTimeoutMs) || config.pageReadyTimeoutMs < 1 || config.pageReadyTimeoutMs > 300_000) throw new Error("pageReadyTimeoutMs must be a whole number between 1 and 300000.");
   if (!finiteInteger(config.maxRequests) || config.maxRequests < 1 || config.maxRequests > 10_000) throw new Error("maxRequests must be a whole number between 1 and 10000.");
   if (config.exactWidths) {
     if (config.exactWidths.length < 1 || config.exactWidths.length > 100) throw new Error("exactWidths must contain between 1 and 100 widths.");

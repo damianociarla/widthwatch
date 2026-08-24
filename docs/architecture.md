@@ -18,7 +18,9 @@ The first pass samples `minWidth`, `maxWidth`, and an initial coarse step. Each 
 
 Screenshots are intentionally captured in one pinned Chromium build. Playwright warns that host OS, browser version, fonts and other environment details affect image output, so baseline and candidate must use the same container.
 
-Explore scans choose widths adaptively. CI comparisons are deterministic: the baseline defines the exact width schedule, the candidate is recaptured at those widths, and the comparator fails closed if any frame, viewport, PNG dimension, or rendering-environment field is incompatible.
+Explore scans choose widths adaptively. CI comparisons are deterministic: the baseline defines the exact width schedule, the candidate is recaptured at those widths, and the comparator fails closed if any frame, viewport, capture mode, PNG dimension, or rendering-environment field is incompatible.
+
+The local engine has two explicit capture modes. `visual` waits for fonts, runs a bounded scroll sweep to activate lazy loading and IntersectionObservers, returns to the top and records a full-page image. `layout` avoids the sweep and records only the viewport for fast geometry exploration. Callers can reload at every width and supply a bounded Playwright `pageReady` hook plus a versioned `readinessKey` for application-specific readiness. The hosted demo deliberately pins `layout` mode to preserve its public time and compute budgets.
 
 ## Public request path
 

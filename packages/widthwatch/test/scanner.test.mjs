@@ -1,22 +1,81 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import test from "node:test";
+import { PNG } from "pngjs";
 import { scanAtWidths, scanResponsive } from "../dist/scanner.js";
+
+async function fixture(context, handler) {
+  const server = createServer(handler);
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  context.after(() => new Promise((resolve) => server.close(resolve)));
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  return `http://127.0.0.1:${address.port}`;
+}
+
+function html(response, body) {
+  response.writeHead(200, { "content-type": "text/html" }).end(`<!doctype html><meta charset="utf-8">${body}`);
+}
 
 test("invalid numeric options fail before launching a browser", async () => {
   await assert.rejects(scanResponsive("https://example.com", { initialStep: 0 }), /initialStep/);
   await assert.rejects(scanResponsive("https://example.com", { minStep: Number.NaN }), /minStep/);
   await assert.rejects(scanResponsive("https://example.com", { viewportHeight: 0 }), /viewportHeight/);
   await assert.rejects(scanResponsive("https://example.com", { exactWidths: [320, 320] }), /duplicates/);
+  await assert.rejects(scanResponsive("https://example.com", { maxElements: 20, maxDomNodes: 10 }), /maxDomNodes/);
+  await assert.rejects(scanResponsive("https://example.com", { maxScrollSteps: 0 }), /maxScrollSteps/);
+  await assert.rejects(scanResponsive("https://example.com", { pageReadyTimeoutMs: Number.NaN }), /pageReadyTimeoutMs/);
+  await assert.rejects(scanResponsive("https://example.com", { pageReady: async () => {} }), /readinessKey/);
 });
 
 test("scanAtWidths captures exactly the requested deterministic schedule", async (context) => {
-  const server = createServer((_request, response) => response.writeHead(200, { "content-type": "text/html" }).end("<!doctype html><title>Fixture</title><main>stable</main>"));
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  context.after(() => new Promise((resolve) => server.close(resolve)));
-  const address = server.address();
-  assert.ok(address && typeof address === "object");
-  const result = await scanAtWidths(`http://127.0.0.1:${address.port}`, [777, 321], { viewportHeight: 480, settleMs: 0 });
+  const url = await fixture(context, (_request, response) => html(response, "<title>Fixture</title><main>stable</main>"));
+  const result = await scanAtWidths(url, [777, 321], { viewportHeight: 480, settleMs: 0 });
   assert.deepEqual(result.frames.map((frame) => frame.width), [321, 777]);
   assert.deepEqual(result.range, { min: 321, max: 777, height: 480 });
+});
+
+test("visual mode scrolls through lazy content and captures the full page", async (context) => {
+  const url = await fixture(context, (_request, response) => html(response, `
+    <div style="height:900px">above fold</div>
+    <div id="lazy" style="width:40px;white-space:nowrap;overflow:hidden;opacity:0">lazy clipped content</div>
+    <div style="height:300px"></div>
+    <script>const target=document.querySelector('#lazy');new IntersectionObserver(entries=>{if(entries.some(entry=>entry.isIntersecting))target.style.opacity='1'}).observe(target)</script>
+  `));
+  const result = await scanAtWidths(url, [320], { viewportHeight: 480, settleMs: 5, mode: "visual", maxScrollSteps: 6 });
+  assert.ok(result.frames[0].issues.some((issue) => issue.kind === "clipped-text" && issue.elements[0]?.selector === "#lazy"));
+  const png = PNG.sync.read(Buffer.from(result.frames[0].screenshot.split(",")[1], "base64"));
+  assert.ok(png.height > 480);
+});
+
+test("pageReady waits for application-specific asynchronous state", async (context) => {
+  const url = await fixture(context, (_request, response) => html(response, `
+    <script>setTimeout(()=>{const node=document.createElement('div');node.id='ready';node.style.cssText='width:30px;white-space:nowrap;overflow:hidden';node.textContent='ready content';document.body.append(node)},80)</script>
+  `));
+  const widths = [];
+  const result = await scanAtWidths(url, [320], {
+    mode: "layout",
+    settleMs: 0,
+    pageReady: async (page, context) => { widths.push(context.width); await page.waitForSelector("#ready"); },
+    readinessKey: "fixture-ready-v1",
+  });
+  assert.deepEqual(widths, [320]);
+  assert.ok(result.frames[0].issues.some((issue) => issue.kind === "clipped-text" && issue.elements[0]?.selector === "#ready"));
+});
+
+test("reloadPerWidth navigates once at every requested width", async (context) => {
+  let navigations = 0;
+  const url = await fixture(context, (request, response) => {
+    if (request.url === "/") navigations += 1;
+    html(response, "<main>stable</main>");
+  });
+  await scanAtWidths(url, [320, 640], { mode: "layout", reloadPerWidth: true, viewportHeight: 480, settleMs: 0 });
+  assert.equal(navigations, 2);
+});
+
+test("maxElements is applied after invisible nodes are filtered", async (context) => {
+  const hidden = Array.from({ length: 8 }, (_, index) => `<div style="display:none">hidden ${index}</div>`).join("");
+  const url = await fixture(context, (_request, response) => html(response, `${hidden}<div id="important" style="width:30px;white-space:nowrap;overflow:hidden">important clipped content</div>`));
+  const result = await scanAtWidths(url, [320], { mode: "layout", maxElements: 1, maxDomNodes: 20, settleMs: 0 });
+  assert.ok(result.frames[0].issues.some((issue) => issue.kind === "clipped-text" && issue.elements[0]?.selector === "#important"));
 });

@@ -4,10 +4,12 @@ import test from "node:test";
 import { parseCliOptions } from "../dist/cli-options.js";
 
 test("CLI accepts value options before the URL without treating their values as the URL", () => {
-  const parsed = parseCliOptions(["--output", "report.html", "--max-samples", "8", "https://example.com"]);
+  const parsed = parseCliOptions(["--output", "report.html", "--max-samples", "8", "--layout-only", "--reload-per-width", "https://example.com"]);
   assert.equal(parsed.url, "https://example.com");
   assert.equal(parsed.output, "report.html");
   assert.equal(parsed.maxSamples, 8);
+  assert.equal(parsed.layoutOnly, true);
+  assert.equal(parsed.reloadPerWidth, true);
 });
 
 test("CLI rejects missing values and unknown flags", () => {

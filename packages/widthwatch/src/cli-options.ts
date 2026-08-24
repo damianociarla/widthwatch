@@ -7,6 +7,8 @@ export interface ParsedCliOptions {
   maxWidth?: number;
   maxSamples?: number;
   fullPage: boolean;
+  layoutOnly: boolean;
+  reloadPerWidth: boolean;
   failOnRegression: boolean;
   help: boolean;
   version: boolean;
@@ -24,6 +26,8 @@ const valueOptions: ReadonlyMap<string, "output" | "json" | "baseline" | "minWid
 export function parseCliOptions(args: string[]): ParsedCliOptions {
   const parsed: ParsedCliOptions = {
     fullPage: false,
+    layoutOnly: false,
+    reloadPerWidth: false,
     failOnRegression: false,
     help: false,
     version: false,
@@ -31,6 +35,8 @@ export function parseCliOptions(args: string[]): ParsedCliOptions {
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index]!;
     if (argument === "--full-page") { parsed.fullPage = true; continue; }
+    if (argument === "--layout-only") { parsed.layoutOnly = true; continue; }
+    if (argument === "--reload-per-width") { parsed.reloadPerWidth = true; continue; }
     if (argument === "--fail-on-regression") { parsed.failOnRegression = true; continue; }
     if (argument === "--help") { parsed.help = true; continue; }
     if (argument === "--version") { parsed.version = true; continue; }
