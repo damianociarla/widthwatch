@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-test("landing exposes the scanner, docs and package command", async () => {
+test("landing exposes the scanner, docs and published package command", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /Trace a public page/);
-  assert.match(html, /Run the bounded hosted beta/);
+  assert.match(html, /npx widthwatch https:\/\/your-site\.com/);
+  assert.match(html, /data-copy=/);
   assert.match(html, /docs\.html/);
   assert.match(html, /id="reportLink"/);
   assert.match(html, /Open interactive report/);

@@ -2,15 +2,15 @@
 
 **Continuous responsive visual regression testing.** WidthWatch finds failures between the three breakpoints everybody remembered to screenshot.
 
-The npm package is not published yet. Until the first tagged beta, run the checked-out source directly:
+Run a correctness-first full-page scan from npm:
 
 ```bash
-git clone https://github.com/damianociarla/widthwatch.git
-cd widthwatch
-npm ci
-npm run build --workspace widthwatch
-node packages/widthwatch/dist/cli.js https://example.com --output widthwatch.html --json widthwatch.json
+npx widthwatch https://example.com \
+  --output widthwatch.html \
+  --json widthwatch.json
 ```
+
+For a pinned CI dependency, use `npm install --save-dev widthwatch`. If Chromium is not already available in the runner, install the matching browser once with `npx playwright install chromium`.
 
 The engine returns versioned TypeScript objects, renders a portable interactive HTML report, and compares a candidate page with a baseline at matching widths. Its adaptive sampler discovers where geometry changes and spends the screenshot budget around those intervals instead of pretending that mobile/tablet/desktop are the whole responsive surface.
 
@@ -66,7 +66,7 @@ const html = generateHtmlReport(comparison);
 Build or deploy the candidate in CI and keep a trusted main-branch JSON baseline. The CLI reads that baseline before scanning and captures the candidate at exactly the same widths:
 
 ```bash
-node packages/widthwatch/dist/cli.js "$CANDIDATE_URL" \
+npx widthwatch "$CANDIDATE_URL" \
   --baseline .widthwatch/home.json \
   --json artifacts/home.json \
   --output artifacts/home.html \

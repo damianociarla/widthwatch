@@ -52,7 +52,15 @@ jobs:
       - uses: actions/setup-node@v6
         with: { node-version: 24, registry-url: "https://registry.npmjs.org", package-manager-cache: false }
       - run: npm ci && npm run build --workspace widthwatch
-      - run: npm publish --workspace widthwatch
+      - name: Publish npm package when missing
+        shell: bash
+        run: |
+          version="${RELEASE_TAG#v}"
+          if npm view "widthwatch@$version" version >/dev/null 2>&1; then
+            echo "widthwatch@$version is already published; continuing the idempotent release."
+          else
+            npm publish --workspace widthwatch
+          fi
   deploy-site:
     needs: publish-npm
     runs-on: ubuntu-latest
