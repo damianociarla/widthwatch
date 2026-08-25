@@ -27,7 +27,12 @@ test("comparison reporter exposes the diff control only for generated diff evide
   const frame = { width: 320, height: 800, document: { width: 320, height: 800 }, layoutSignature: "x", issues: [], screenshot: "data:image/png;base64,", durationMs: 1 };
   const report = { version: 1, url: "https://example.com/", title: "Example", scannedAt: new Date(0).toISOString(), durationMs: 1, range: { min: 320, max: 320, height: 800 }, environment: { browser: "test", platform: "test", packageVersion: "0.2.3" }, frames: [frame], transitions: [], summary: { errors: 0, warnings: 0, info: 0, sampledWidths: 1 } };
   const comparison = { version: 1, baseline: report, candidate: report, diffs: [{ width: 320, changedPixels: 1, ratio: 0.1, diffScreenshot: "data:image/png;base64,AA==" }], regressions: [], valid: true, validationErrors: [], passed: true };
-  assert.match(generateHtmlReport(comparison), /data-view="diff"/);
+  const html = generateHtmlReport(comparison);
+  assert.match(html, /data-view="diff"/);
+  assert.match(html, /role="tablist"/);
+  assert.match(html, /role="tab" aria-selected="true"/);
+  assert.match(html, /role="tabpanel" aria-labelledby="view-candidate"/);
+  assert.match(html, /regression ranges/);
 });
 
 test("reporter distinguishes geometry probes from visual evidence", () => {
@@ -39,6 +44,9 @@ test("reporter distinguishes geometry probes from visual evidence", () => {
   assert.match(html, /visual evidence/);
   assert.match(html, /Detected during discovery; visual evidence was not captured/);
   assert.match(html, /discovery only/);
+  assert.match(html, /viewer\.no-capture\{min-height:112px\}/);
+  assert.match(html, /mobile-diagnostic/);
+  assert.match(html, /syncIssuePlacement/);
   assert.match(html, /probes\.findIndex/);
 });
 

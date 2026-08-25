@@ -1,7 +1,7 @@
 {
   "name": "widthwatch-monorepo",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.4.1",
   "type": "module",
   "workspaces": [
     "apps/*",
@@ -18,10 +18,10 @@
     "proof:generate": "npm run build --workspace widthwatch && npm run build --workspace @widthwatch/web && node scripts/generate-proof.mjs"
   },
   "engines": {
-    "node": ">=24"
+    "node": ">=22"
   },
   "devDependencies": {
-    "@types/node": "^24.3.0",
+    "@types/node": "^22.0.0",
     "typescript": "^5.9.2"
   }
 }

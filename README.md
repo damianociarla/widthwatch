@@ -101,7 +101,7 @@ infra/aws                App Runner, CloudFront and WAF infrastructure
 
 ## Local development
 
-Node.js 24 and Chromium are required.
+Node.js 22 or newer and Chromium are required. The complete monorepo and the published package are both verified on Node.js 22 and 24.
 
 ```bash
 npm ci
