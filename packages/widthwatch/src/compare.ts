@@ -3,6 +3,7 @@ import { PNG } from "pngjs";
 import type { CompareOptions, ComparisonError, ComparisonReport, LayoutProbe, ResponsiveIssue, VisualDiff, WidthWatchReport } from "./types.js";
 import { groupIssuesByRange } from "./issue-ranges.js";
 import { issueOccurrenceKey } from "./issue-identity.js";
+import { getReportIssues } from "./report-issues.js";
 
 export function compareReports(baseline: WidthWatchReport, candidate: WidthWatchReport, options: CompareOptions = {}): ComparisonReport {
   const threshold = options.threshold ?? 0.2;
@@ -59,12 +60,22 @@ export function compareReports(baseline: WidthWatchReport, candidate: WidthWatch
     }
   }
 
-  const baselineFindings = reportIssues(baseline, baselineProbes);
-  const candidateFindings = reportIssues(candidate, candidateProbes);
-  const baselineIssues = new Set(baselineFindings.map(issueKey));
-  const candidateIssues = new Set(candidateFindings.map(issueKey));
+  const baselineFindings = getReportIssues(baseline);
+  const candidateFindings = getReportIssues(candidate);
+  const baselineIssues = new Map(baselineFindings.map((issue) => [issueKey(issue), issue]));
+  const candidateIssues = new Map(candidateFindings.map((issue) => [issueKey(issue), issue]));
+  const escalated: NonNullable<ComparisonReport["escalated"]> = [];
+  const deescalated: NonNullable<ComparisonReport["deescalated"]> = [];
   for (const issue of candidateFindings) {
-    if (!baselineIssues.has(issueKey(issue))) regressions.push(issue);
+    const previous = baselineIssues.get(issueKey(issue));
+    if (!previous) {
+      regressions.push(issue);
+    } else if (severityRank(issue.severity) > severityRank(previous.severity)) {
+      escalated.push({ baseline: previous, candidate: issue });
+      regressions.push(issue);
+    } else if (severityRank(issue.severity) < severityRank(previous.severity)) {
+      deescalated.push({ baseline: previous, candidate: issue });
+    }
   }
   const resolved = baselineFindings.filter((issue) => !candidateIssues.has(issueKey(issue)));
   const valid = validationErrors.length === 0;
@@ -75,6 +86,8 @@ export function compareReports(baseline: WidthWatchReport, candidate: WidthWatch
     diffs,
     regressions,
     resolved,
+    escalated,
+    deescalated,
     regressionRanges: groupIssuesByRange(candidateProbes.map((probe) => probe.width), regressions),
     settings: { threshold, maxDiffRatio },
     valid,
@@ -134,10 +147,6 @@ function reportProbes(report: WidthWatchReport): LayoutProbe[] {
   return report.probes?.length ? report.probes : report.frames;
 }
 
-function reportIssues(report: WidthWatchReport, probes = reportProbes(report)): ResponsiveIssue[] {
-  return report.issues ?? probes.flatMap((probe) => probe.issues);
-}
-
 function decodePng(dataUrl: string): PNG {
   const encoded = dataUrl.slice(dataUrl.indexOf(",") + 1);
   return PNG.sync.read(Buffer.from(encoded, "base64"));
@@ -145,4 +154,8 @@ function decodePng(dataUrl: string): PNG {
 
 function issueKey(issue: ResponsiveIssue): string {
   return issueOccurrenceKey(issue);
+}
+
+function severityRank(severity: ResponsiveIssue["severity"]): number {
+  return severity === "error" ? 2 : severity === "warning" ? 1 : 0;
 }

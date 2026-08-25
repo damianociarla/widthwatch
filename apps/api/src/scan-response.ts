@@ -1,5 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
-import type { WidthWatchReport } from "widthwatch";
+import { getReportIssues, type WidthWatchReport } from "widthwatch";
 
 export type HostedScanStatus = "queued" | "running" | "complete" | "failed";
 
@@ -28,10 +28,7 @@ export async function holdConnectionUntilSettled(
 }
 
 export function scanStatusPayload(job: HostedScanJob): Record<string, unknown> {
-  const canonicalIssues = job.report?.issues ?? [
-    ...(job.report?.probes?.flatMap((probe) => probe.issues) ?? []),
-    ...(job.report?.frames.flatMap((frame) => frame.issues) ?? []),
-  ];
+  const canonicalIssues = job.report ? getReportIssues(job.report) : [];
   return {
     id: job.id,
     status: job.status,

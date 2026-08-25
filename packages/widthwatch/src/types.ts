@@ -138,6 +138,11 @@ export interface ComparisonError {
   width?: number;
 }
 
+export interface IssueSeverityChange {
+  baseline: ResponsiveIssue;
+  candidate: ResponsiveIssue;
+}
+
 export interface ComparisonReport {
   version: 1;
   baseline: WidthWatchReport;
@@ -145,6 +150,8 @@ export interface ComparisonReport {
   diffs: VisualDiff[];
   regressions: ResponsiveIssue[];
   resolved?: ResponsiveIssue[];
+  escalated?: IssueSeverityChange[];
+  deescalated?: IssueSeverityChange[];
   regressionRanges?: ResponsiveIssueRange[];
   settings?: { threshold: number; maxDiffRatio: number };
   valid: boolean;

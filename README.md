@@ -83,9 +83,11 @@ Baseline and candidate must run in the same pinned browser container. Browser re
 
 The CLI uses correctness-first visual capture and reloads each width. Adaptive visual scans probe up to 24 widths geometrically, then use `--max-captures` (default 8) to bound the expensive full-page evidence schedule. Every discovery finding remains in `report.probes` and the canonical `report.issues`, even when its width has no screenshot. Baseline comparisons reproduce both the probe schedule and the evidence schedule. For a fast diagnostic probe that only inspects the viewport, use `--layout-only`; add `--reload-per-width` when a layout-only application calculates responsive state only during startup.
 
+Severity changes are explicit comparison outcomes. A finding that moves from warning to error enters both `regressions` and `escalated`; a lower severity is recorded in `deescalated` without being misreported as resolved. See the [migration notes](docs/migrations.md) before reusing baselines created before v0.3.1.
+
 The generated workflow is deliberately read-only and uploads the portable report as an artifact. It accepts a deployed preview URL through `workflow_call` or manual dispatch, and never uses `pull_request_target`. Connect it to the step that already deploys your application preview.
 
-See the [regression observed at 742, 768 and 811px](https://damianociarla.github.io/widthwatch/proof.html) for a real baseline/candidate/diff report generated from the committed fixtures; 720 and 832px are the adjacent clean samples.
+See the [two-pass proof with 12 probes and 4 evidence captures](https://damianociarla.github.io/widthwatch/proof-two-pass.html), including discovery-only findings that remain actionable. The [exact-width proof](https://damianociarla.github.io/widthwatch/proof.html) remains available for the baseline/candidate/diff path.
 
 ## Repository
 

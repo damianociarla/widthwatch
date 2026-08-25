@@ -16,6 +16,10 @@ A deterministic responsive issue identified by kind and sorted element selectors
 
 The report-level union of findings from probes and evidence. Occurrences are deduplicated by width and finding identity; evidence wins when both phases reproduce the same occurrence.
 
+## Severity change
+
+A comparison of the same finding occurrence across baseline and candidate. Higher candidate severity is an escalation and therefore a regression; lower candidate severity is a de-escalation, not a resolved finding.
+
 ## Report schedule
 
 The pair of ordered width schedules used by a report: all probe widths and the evidence subset. CI reproduces both schedules and fails closed when either differs.

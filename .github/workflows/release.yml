@@ -75,6 +75,6 @@ jobs:
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             echo "$RELEASE_TAG already has a GitHub Release; continuing the idempotent release."
           else
-            gh release create "$RELEASE_TAG" --verify-tag --generate-notes --title "WidthWatch $RELEASE_TAG"
+            gh release create "$RELEASE_TAG" --verify-tag --generate-notes --title "WidthWatch $RELEASE_TAG" --notes "Before upgrading, review the [versioned migration notes](https://github.com/${{ github.repository }}/blob/$RELEASE_TAG/docs/migrations.md)."
           fi
         env: { GH_TOKEN: "${{ github.token }}" }

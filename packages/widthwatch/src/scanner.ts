@@ -2,7 +2,8 @@ import { chromium, type Browser, type BrowserContext, type Page } from "playwrig
 import type { ElementRef, LayoutFrame, LayoutProbe, ResponsiveIssue, ScanOptions, WidthTransition, WidthWatchReport } from "./types.js";
 import { CAPTURE_PROTOCOL_VERSION, PACKAGE_VERSION } from "./version.js";
 import { groupIssuesByRange } from "./issue-ranges.js";
-import { issueIdentity, issueOccurrenceKey } from "./issue-identity.js";
+import { issueIdentity } from "./issue-identity.js";
+import { mergeReportIssues } from "./report-issues.js";
 
 interface ProbeResult {
   document: { width: number; height: number };
@@ -165,7 +166,7 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
     const orderedProbes = [...probes.values()].sort((a, b) => a.width - b.width);
     const transitions = buildTransitions(orderedProbes);
     addLayoutJumpIssues(orderedProbes, transitions);
-    const issues = canonicalIssues(orderedProbes, orderedFrames);
+    const issues = mergeReportIssues(orderedProbes, orderedFrames);
     return {
       version: 1,
       url: normalizedUrl,
@@ -634,13 +635,6 @@ function addLayoutJumpIssues(frames: FrameSignal[], transitions: WidthTransition
 function toProbe(frame: LayoutFrame): LayoutProbe {
   const { screenshot: _screenshot, ...probe } = frame;
   return probe;
-}
-
-function canonicalIssues(probes: LayoutProbe[], frames: LayoutFrame[]): ResponsiveIssue[] {
-  const issues = new Map<string, ResponsiveIssue>();
-  for (const issue of probes.flatMap((probe) => probe.issues)) issues.set(issueOccurrenceKey(issue), { ...issue, evidence: "discovery" });
-  for (const issue of frames.flatMap((frame) => frame.issues)) issues.set(issueOccurrenceKey(issue), { ...issue, evidence: "capture" });
-  return [...issues.values()].sort((a, b) => a.width - b.width || a.kind.localeCompare(b.kind) || issueIdentity(a).localeCompare(issueIdentity(b)));
 }
 
 function normalizeUrl(value: string): string {

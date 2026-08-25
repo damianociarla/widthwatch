@@ -20,7 +20,9 @@ Visual scans then open a fresh browser context and capture a bounded evidence su
 
 Screenshots are intentionally captured in one pinned Chromium build. Playwright warns that host OS, browser version, fonts and other environment details affect image output, so baseline and candidate must use the same container.
 
-Explore scans choose widths adaptively. CI comparisons are deterministic: the baseline defines an ordered report schedule, the candidate repeats every probe width and recaptures the exact evidence subset. The comparator fails closed if either schedule, any frame, viewport, capture mode, PNG dimension, or rendering-environment field is incompatible. Pixel comparison only decodes evidence frames; geometry regressions use canonical issues at every probe width.
+Explore scans choose widths adaptively. CI comparisons are deterministic: the baseline defines an ordered report schedule, the candidate repeats every probe width and recaptures the exact evidence subset. The comparator fails closed if either schedule, any frame, viewport, capture mode, PNG dimension, or rendering-environment field is incompatible. Pixel comparison only decodes evidence frames; geometry regressions use canonical issues at every probe width. Occurrences are compared by stable identity before severity: new findings and severity escalations are regressions, de-escalations are explicit improvements, and only absent candidate occurrences are resolved.
+
+The standalone reporter treats the responsive timeline as one interactive graph. Passive markers never compete for pointer hit testing; the graph maps pointer position to the nearest probe and exposes an accessible slider-like keyboard surface for exact sample navigation.
 
 `widthwatch init` creates a TypeScript config and a reusable GitHub Actions workflow. The workflow accepts a candidate preview URL, runs with read-only repository permissions and uploads the standalone HTML as an artifact. It intentionally avoids automatic writable PR comments and `pull_request_target`; a future authenticated GitHub App can add comments without weakening fork safety.
 

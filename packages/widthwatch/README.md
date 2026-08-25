@@ -36,7 +36,7 @@ Use `maxRequestsPerNavigation` to bound one page load and `maxTotalRequests` as 
 
 Comparisons fail closed when widths, viewport dimensions, the rendering fingerprint, browser, platform, or PNG dimensions are incompatible. The capture protocol is versioned separately from the npm package, so a non-rendering patch release does not invalidate every baseline. `comparison.valid` explains whether a visual pass/fail decision is meaningful.
 
-Reports group repeated findings into typed `issueRanges`, recording affected samples and adjacent clean samples without claiming exact unsampled boundaries. Comparison reports additionally expose new findings, resolved findings, regression ranges and the exact pixel threshold used. The HTML UI opens on the first regression and provides baseline, candidate and a truthful diff view when diff images were generated.
+Reports group repeated findings into typed `issueRanges`, recording affected samples and adjacent clean samples without claiming exact unsampled boundaries. Comparison reports additionally expose new findings, resolved findings, severity `escalated`/`deescalated` changes, regression ranges and the exact pixel threshold used. Escalations enter `regressions`; de-escalations remain distinct from resolved findings. The HTML UI opens on the first regression and provides baseline, candidate and a truthful diff view when diff images were generated.
 
 New reports expose optional `sampling` metadata, geometry `probes`, and a canonical `issues` union. `frames` contains only screenshot evidence. Each canonical issue identifies whether it was reproduced during capture or observed only during discovery. These fields remain optional on schema-v1 objects so existing report producers stay source-compatible.
 

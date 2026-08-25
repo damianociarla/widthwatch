@@ -126,6 +126,57 @@ test("probe-only findings remain valid regressions without entering pixel decodi
   assert.equal(comparison.diffs.length, 2);
 });
 
+test("probe-only severity escalation is a regression without becoming resolved", () => {
+  const finding = (severity) => ({ id: `overlap-${severity}`, kind: "overlap", severity, width: 640, message: severity, elements: [{ selector: "#alpha", tagName: "div", rect: { x: 0, y: 0, width: 20, height: 10 } }, { selector: "#beta", tagName: "div", rect: { x: 10, y: 0, width: 20, height: 10 } }], evidence: "discovery" });
+  const probe = (width, issues = []) => ({ width, height: 800, document: { width, height: 1000 }, layoutSignature: "stable", issues, durationMs: 1 });
+  const baseline = report([320, 640], { probes: [probe(320), probe(640, [finding("warning")])] });
+  const candidate = report([320, 640], { probes: [probe(320), probe(640, [finding("error")])] });
+  const comparison = compareReports(baseline, candidate);
+  assert.equal(comparison.valid, true);
+  assert.equal(comparison.passed, false);
+  assert.deepEqual(comparison.regressions, [finding("error")]);
+  assert.deepEqual(comparison.escalated, [{ baseline: finding("warning"), candidate: finding("error") }]);
+  assert.deepEqual(comparison.resolved, []);
+  assert.deepEqual(comparison.deescalated, []);
+});
+
+test("severity de-escalation is reported separately from resolved findings", () => {
+  const finding = (severity) => ({ id: `clipped-${severity}`, kind: "clipped-text", severity, width: 640, message: severity, elements: [{ selector: "#copy", tagName: "p", rect: { x: 0, y: 0, width: 20, height: 10 } }], evidence: "discovery" });
+  const probe = (issues) => ({ width: 640, height: 800, document: { width: 640, height: 1000 }, layoutSignature: "stable", issues, durationMs: 1 });
+  const baseline = report([640], { probes: [probe([finding("error")])] });
+  const candidate = report([640], { probes: [probe([finding("warning")])] });
+  const comparison = compareReports(baseline, candidate);
+  assert.equal(comparison.passed, true);
+  assert.deepEqual(comparison.regressions, []);
+  assert.deepEqual(comparison.resolved, []);
+  assert.deepEqual(comparison.deescalated, [{ baseline: finding("error"), candidate: finding("warning") }]);
+});
+
+test("optional canonical fallback retains capture-only findings when probes exist", () => {
+  const finding = { id: "lazy-capture", kind: "clipped-text", severity: "error", width: 640, message: "lazy", elements: [{ selector: "#lazy", tagName: "p", rect: { x: 0, y: 0, width: 20, height: 10 } }] };
+  const probe = { width: 640, height: 800, document: { width: 640, height: 1000 }, layoutSignature: "stable", issues: [], durationMs: 1 };
+  const baseline = report([640], { probes: [probe] });
+  const candidate = report([640], { probes: [probe] });
+  candidate.frames[0].issues = [finding];
+  const comparison = compareReports(baseline, candidate);
+  assert.equal(comparison.passed, false);
+  assert.deepEqual(comparison.regressions, [{ ...finding, evidence: "capture" }]);
+});
+
+test("optional canonical fallback lets capture severity prevail over the same probe occurrence", () => {
+  const finding = (severity) => ({ id: `overlap-${severity}`, kind: "overlap", severity, width: 640, message: severity, elements: [{ selector: "#same", tagName: "div", rect: { x: 0, y: 0, width: 20, height: 10 } }] });
+  const probe = (issue) => ({ width: 640, height: 800, document: { width: 640, height: 1000 }, layoutSignature: "stable", issues: [issue], durationMs: 1 });
+  const baseline = report([640], { probes: [probe(finding("warning"))] });
+  baseline.frames[0].issues = [finding("warning")];
+  const candidate = report([640], { probes: [probe(finding("warning"))] });
+  candidate.frames[0].issues = [finding("error")];
+  const comparison = compareReports(baseline, candidate);
+  assert.equal(comparison.passed, false);
+  assert.equal(comparison.escalated.length, 1);
+  assert.equal(comparison.escalated[0].candidate.severity, "error");
+  assert.equal(comparison.escalated[0].candidate.evidence, "capture");
+});
+
 test("different PNG dimensions fail closed", () => {
   const baseline = report([320]);
   const candidate = report([320]);

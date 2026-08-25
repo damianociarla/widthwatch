@@ -15,10 +15,12 @@ test("landing exposes the scanner, docs and published package command", async ()
   assert.match(html, /application\/ld\+json/);
   assert.match(html, /og-widthwatch\.png/);
   assert.match(html, /summary_large_image/);
-  assert.match(html, /softwareVersion":"0\.3\.1/);
+  assert.match(html, /softwareVersion":"0\.4\.0/);
   assert.match(html, /id="navToggle"/);
   assert.match(html, /Reproducible evidence/);
   assert.match(html, /href="\.\/proof\.html"/);
+  assert.match(html, /href="\.\/proof-two-pass\.html"/);
+  assert.match(html, /Twelve geometry probes/);
 });
 
 test("production build uses the GitHub Pages repository base path", async () => {
@@ -35,10 +37,14 @@ test("production artifact includes the documentation entry", async () => {
 test("production artifact includes real proof fixtures and comparison report", async () => {
   const proof = await readFile(new URL("../dist/proof.html", import.meta.url), "utf8");
   const candidate = await readFile(new URL("../dist/proof-candidate.html", import.meta.url), "utf8");
+  const twoPassProof = await readFile(new URL("../dist/proof-two-pass.html", import.meta.url), "utf8");
   assert.match(proof, /First regression/);
   assert.match(proof, /Observed at 742—811px/);
   assert.match(proof, /clipped-text/);
   assert.match(candidate, /min-width:742px/);
+  assert.match(twoPassProof, /captures <strong>4<\/strong>/);
+  assert.match(twoPassProof, /probes <strong>12<\/strong>/);
+  assert.match(twoPassProof, /discovery only/);
 });
 
 test("public scanner serializes runs and the landing exposes visible keyboard focus", async () => {

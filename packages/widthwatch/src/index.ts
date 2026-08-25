@@ -3,6 +3,7 @@ export { compareReports } from "./compare.js";
 export { generateHtmlReport } from "./reporter.js";
 export { defineConfig, loadWidthWatchConfig } from "./config.js";
 export { groupIssuesByRange } from "./issue-ranges.js";
+export { getReportIssues, mergeReportIssues } from "./report-issues.js";
 export type {
   CompareOptions,
   ComparisonError,
@@ -10,6 +11,7 @@ export type {
   ComparisonReport,
   ElementRef,
   IssueKind,
+  IssueSeverityChange,
   LayoutFrame,
   LayoutProbe,
   Rect,

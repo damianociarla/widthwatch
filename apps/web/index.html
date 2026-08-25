@@ -15,7 +15,7 @@
     <meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://damianociarla.github.io/widthwatch/og-widthwatch.png" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"WidthWatch","applicationCategory":"DeveloperApplication","operatingSystem":"Node.js","softwareVersion":"0.3.1","url":"https://damianociarla.github.io/widthwatch/","downloadUrl":"https://www.npmjs.com/package/widthwatch","license":"https://opensource.org/licenses/MIT"}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"WidthWatch","applicationCategory":"DeveloperApplication","operatingSystem":"Node.js","softwareVersion":"0.4.0","url":"https://damianociarla.github.io/widthwatch/","downloadUrl":"https://www.npmjs.com/package/widthwatch","license":"https://opensource.org/licenses/MIT"}</script>
     <title>WidthWatch · Adaptive responsive regression testing</title>
   </head>
   <body>
@@ -30,7 +30,7 @@
     <main id="main">
       <section class="hero" id="top">
         <div class="hero-copy reveal">
-          <p class="eyebrow">Open source · v0.3 on npm</p>
+          <p class="eyebrow">Open source · v0.4 on npm</p>
           <h1>Find the width<br>where it <em>breaks.</em></h1>
           <p class="lede">WidthWatch adaptively samples the space between mobile and desktop, then turns layout discontinuities into evidence your pull request can act on.</p>
           <button class="command" data-widthwatch-ignore data-copy="npx widthwatch https://your-site.com" type="button"><code>npx widthwatch https://your-site.com</code><span>Copy</span></button>
@@ -67,8 +67,8 @@
       </section>
 
       <section class="proof" id="proof">
-        <div class="proof-copy reveal"><p class="eyebrow">Reproducible evidence</p><h2>A regression,<br>not a mockup.</h2><p>The same fixture is captured as baseline and candidate at five exact widths. The primary action is missing at three sampled widths, bounded by clean samples.</p><a class="proof-link" href="./proof.html">Open the real comparison report <span>↗</span></a></div>
-        <div class="proof-trace" aria-label="Regression observed at 742, 768 and 811 pixels; 720 and 832 pixels are clean"><div class="proof-axis"><span>720</span><span>742</span><span>768</span><span>811</span><span>832</span></div><div class="proof-range"><i></i></div><p><b>Observed at 742—811px</b><span>720 &amp; 832px clean · primary CTA clipped</span></p><code>.checkout-actions &gt; button</code></div>
+        <div class="proof-copy reveal"><p class="eyebrow">Reproducible evidence</p><h2>A regression,<br>not a mockup.</h2><p>Twelve geometry probes preserve the full responsive trace. Four visual captures provide bounded evidence, while discovery-only findings remain actionable.</p><div class="proof-links"><a class="proof-link" href="./proof-two-pass.html">Open the two-pass report <span>↗</span></a><a class="proof-link secondary" href="./proof.html">Exact-width comparison <span>↗</span></a></div></div>
+        <div class="proof-trace" aria-label="Twelve geometry probes, four visual captures, and a regression observed from 742 to 811 pixels"><div class="proof-count"><b>12</b><span>geometry probes</span><i>→</i><b>4</b><span>visual captures</span></div><div class="proof-axis"><span>720</span><span>742</span><span>768</span><span>811</span><span>832</span></div><div class="proof-range"><i></i></div><p><b>Observed at 742—811px</b><span>768px discovery-only · primary CTA clipped</span></p><code>.checkout-actions &gt; button</code></div>
       </section>
 
       <section class="integration">
