@@ -18,7 +18,7 @@ test("landing exposes the scanner, docs and published package command", async ()
   assert.match(html, /application\/ld\+json/);
   assert.match(html, /og-widthwatch\.png/);
   assert.match(html, /summary_large_image/);
-  assert.match(html, /softwareVersion":"0\.4\.3/);
+  assert.match(html, /softwareVersion":"0\.4\.4/);
   assert.match(html, /id="navToggle"/);
   assert.match(html, /Reproducible evidence/);
   assert.match(html, /href="\.\/proof\.html"/);

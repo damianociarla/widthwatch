@@ -1,5 +1,11 @@
 # Migration notes
 
+## v0.4.4
+
+This patch strengthens hosted HTTPS egress verification without changing report schema, sampling protocol or capture protocol. Existing baselines compatible with v0.4.0–v0.4.3 remain compatible with v0.4.4.
+
+The pinned proxy's successful `CONNECT` path now runs against a real local TCP upstream. The suite verifies the 200 handshake, pre-read head forwarding, bidirectional bytes, fallback from an unreachable first address, and closure propagation in both directions. Production networking is unchanged; an injected connection adapter only maps the privileged port to an ephemeral test listener. The focused egress gate rises to 95% lines, 80% branches and 80% functions.
+
 ## v0.4.3
 
 This patch hardens the hosted HTTP admission path without changing report schema, sampling protocol or capture protocol. Existing baselines compatible with v0.4.0–v0.4.2 remain compatible with v0.4.3.

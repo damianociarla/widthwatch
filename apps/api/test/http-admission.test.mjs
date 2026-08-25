@@ -11,7 +11,7 @@ function report(url = "https://example.com/") {
     scannedAt: new Date(0).toISOString(),
     durationMs: 1,
     range: { min: 320, max: 320, height: 800 },
-    environment: { browser: "test", platform: "test", packageVersion: "0.4.3" },
+    environment: { browser: "test", platform: "test", packageVersion: "0.4.4" },
     frames: [
       {
         width: 320,
