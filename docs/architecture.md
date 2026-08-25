@@ -14,11 +14,13 @@ The package remains the product. The hosted demo is a constrained preview, not a
 
 ## Continuous-width engine
 
-The first pass samples `minWidth`, `maxWidth`, and an initial coarse step. Each frame emits a layout signature based on normalized, quantized element geometry and a finding fingerprint. Intervals whose signatures differ are prioritized and bisected until `minStep` or `maxSamples` is reached. A refinement penalty per coarse band prevents one high-scoring transition from consuming the entire budget. Repeated findings are grouped across consecutive sampled widths into explicit issue ranges.
+The first pass samples `minWidth`, `maxWidth`, and an initial coarse step. Each probe emits a layout signature based on normalized, quantized element geometry and a finding fingerprint. Intervals whose signatures differ are prioritized and bisected until `minStep` or `maxSamples` is reached. A refinement penalty per coarse band prevents one high-scoring transition from consuming the entire budget.
+
+Visual scans then open a fresh browser context and capture a bounded evidence subset. Range endpoints are invariant; distinct finding identities are represented before remaining slots are spent on strong transitions and width coverage. Probes and evidence remain separate in the report. Canonical issues are the deduplicated union of both phases, so a discovery-only finding is never discarded and a lazy finding visible only after scroll sweep is also retained. Repeated canonical findings are grouped across consecutive probe widths into explicit issue ranges.
 
 Screenshots are intentionally captured in one pinned Chromium build. Playwright warns that host OS, browser version, fonts and other environment details affect image output, so baseline and candidate must use the same container.
 
-Explore scans choose widths adaptively. CI comparisons are deterministic: the baseline defines the exact width schedule, the candidate is recaptured at those widths, and the comparator fails closed if any frame, viewport, capture mode, PNG dimension, or rendering-environment field is incompatible.
+Explore scans choose widths adaptively. CI comparisons are deterministic: the baseline defines an ordered report schedule, the candidate repeats every probe width and recaptures the exact evidence subset. The comparator fails closed if either schedule, any frame, viewport, capture mode, PNG dimension, or rendering-environment field is incompatible. Pixel comparison only decodes evidence frames; geometry regressions use canonical issues at every probe width.
 
 `widthwatch init` creates a TypeScript config and a reusable GitHub Actions workflow. The workflow accepts a candidate preview URL, runs with read-only repository permissions and uploads the standalone HTML as an artifact. It intentionally avoids automatic writable PR comments and `pull_request_target`; a future authenticated GitHub App can add comments without weakening fork safety.
 
@@ -38,4 +40,4 @@ For a paid or multi-tenant product, replace the in-memory queue with DynamoDB + 
 
 ## Release order
 
-A `v*` tag validates the exact artifact, deploys the bounded API, publishes npm through trusted OIDC publishing, and creates the GitHub Release. Pushes to `main` deploy GitHub Pages, keeping Pages environment protection independent from release tags. AWS access uses GitHub OIDC and short-lived credentials. Production is a protected GitHub environment.
+A `v*` tag validates the exact artifact, then deploys the bounded API and publishes npm through trusted OIDC in parallel. The idempotent GitHub Release waits for both. Pushes to `main` deploy GitHub Pages, keeping Pages environment protection independent from release tags. AWS access uses GitHub OIDC and short-lived credentials. Production is a protected GitHub environment.

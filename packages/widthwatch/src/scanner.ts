@@ -1,7 +1,8 @@
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
-import type { ElementRef, LayoutFrame, ResponsiveIssue, ScanOptions, WidthTransition, WidthWatchReport } from "./types.js";
+import type { ElementRef, LayoutFrame, LayoutProbe, ResponsiveIssue, ScanOptions, WidthTransition, WidthWatchReport } from "./types.js";
 import { CAPTURE_PROTOCOL_VERSION, PACKAGE_VERSION } from "./version.js";
 import { groupIssuesByRange } from "./issue-ranges.js";
+import { issueIdentity, issueOccurrenceKey } from "./issue-identity.js";
 
 interface ProbeResult {
   document: { width: number; height: number };
@@ -9,11 +10,12 @@ interface ProbeResult {
   issues: ResponsiveIssue[];
 }
 
-type FrameSignal = Pick<LayoutFrame, "width" | "height" | "document" | "layoutSignature" | "issues" | "durationMs">;
+type FrameSignal = LayoutProbe;
 
 interface ResolvedScanOptions {
   mode: "layout" | "visual";
   exactWidths: number[] | undefined;
+  probeWidths: number[] | undefined;
   minWidth: number;
   maxWidth: number;
   viewportHeight: number;
@@ -43,7 +45,7 @@ interface ResolvedScanOptions {
   allowedUrl: ScanOptions["allowedUrl"] | undefined;
 }
 
-const defaults: Omit<ResolvedScanOptions, "allowedUrl" | "exactWidths" | "pageReady" | "readinessKey"> = {
+const defaults: Omit<ResolvedScanOptions, "allowedUrl" | "exactWidths" | "probeWidths" | "pageReady" | "readinessKey"> = {
   mode: "visual",
   minWidth: 320,
   maxWidth: 1440,
@@ -73,7 +75,9 @@ const defaults: Omit<ResolvedScanOptions, "allowedUrl" | "exactWidths" | "pageRe
 
 export async function scanResponsive(url: string, options: ScanOptions = {}): Promise<WidthWatchReport> {
   const requestedWidths = options.exactWidths ? [...options.exactWidths] : undefined;
-  const derivableWidths = requestedWidths?.length && requestedWidths.every(Number.isFinite) ? requestedWidths : undefined;
+  const requestedProbeWidths = options.probeWidths ? [...options.probeWidths] : undefined;
+  const allRequestedWidths = [...(requestedWidths ?? []), ...(requestedProbeWidths ?? [])];
+  const derivableWidths = allRequestedWidths.length && allRequestedWidths.every(Number.isFinite) ? allRequestedWidths : undefined;
   const mode = options.mode ?? defaults.mode;
   const config: ResolvedScanOptions = {
     ...defaults,
@@ -86,6 +90,7 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
       maxWidth: options.maxWidth ?? Math.max(...derivableWidths),
     } : {}),
     exactWidths: requestedWidths,
+    probeWidths: requestedProbeWidths,
     pageReady: options.pageReady,
     readinessKey: options.readinessKey,
     allowedUrl: options.allowedUrl,
@@ -111,11 +116,24 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
     if (!config.reloadPerWidth) await navigate(page, normalizedUrl, config, requestBudget);
 
     let frames: Map<number, LayoutFrame>;
+    let probes: Map<number, LayoutProbe>;
     let discoveryWidths: number[];
     let samplingStrategy: NonNullable<WidthWatchReport["sampling"]>["strategy"];
-    if (config.exactWidths) {
+    if (config.exactWidths && config.probeWidths) {
+      probes = new Map();
+      for (const width of config.probeWidths) probes.set(width, await probeDiscoveryFrame(page, normalizedUrl, width, config, requestBudget));
+      discoveryWidths = [...probes.keys()];
+      await context.close();
+      context = await createScanContext(browser, config, requestBudget);
+      page = await context.newPage();
+      if (!config.reloadPerWidth) await navigate(page, normalizedUrl, config, requestBudget);
       frames = new Map();
       for (const width of config.exactWidths) frames.set(width, await captureFrame(page, normalizedUrl, width, config, requestBudget));
+      samplingStrategy = "planned-two-pass";
+    } else if (config.exactWidths) {
+      frames = new Map();
+      for (const width of config.exactWidths) frames.set(width, await captureFrame(page, normalizedUrl, width, config, requestBudget));
+      probes = new Map([...frames].map(([width, frame]) => [width, toProbe(frame)]));
       discoveryWidths = [];
       samplingStrategy = "exact";
     } else if (config.mode === "visual") {
@@ -123,6 +141,7 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
         (width) => probeDiscoveryFrame(page, normalizedUrl, width, config, requestBudget),
         config,
       );
+      probes = discovered;
       discoveryWidths = [...discovered.keys()].sort((a, b) => a - b);
       const captureWidths = selectVisualCaptureWidths(discovered, config.maxCaptureSamples);
       await context.close();
@@ -137,14 +156,16 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
         (width) => captureFrame(page, normalizedUrl, width, config, requestBudget),
         config,
       );
+      probes = new Map([...frames].map(([width, frame]) => [width, toProbe(frame)]));
       discoveryWidths = [...frames.keys()].sort((a, b) => a - b);
       samplingStrategy = "adaptive-single-pass";
     }
 
     const orderedFrames = [...frames.values()].sort((a, b) => a.width - b.width);
-    const transitions = buildTransitions(orderedFrames);
-    addLayoutJumpIssues(orderedFrames, transitions);
-    const issues = orderedFrames.flatMap((frame) => frame.issues);
+    const orderedProbes = [...probes.values()].sort((a, b) => a.width - b.width);
+    const transitions = buildTransitions(orderedProbes);
+    addLayoutJumpIssues(orderedProbes, transitions);
+    const issues = canonicalIssues(orderedProbes, orderedFrames);
     return {
       version: 1,
       url: normalizedUrl,
@@ -173,19 +194,21 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
         readinessKey: config.readinessKey ?? null,
       },
       sampling: {
-        protocolVersion: 1,
+        protocolVersion: 2,
         strategy: samplingStrategy,
         discoveryWidths,
         capturedWidths: orderedFrames.map((frame) => frame.width),
       },
+      ...(samplingStrategy.includes("two-pass") ? { probes: orderedProbes } : {}),
+      issues,
       frames: orderedFrames,
       transitions,
-      issueRanges: groupIssuesByRange(orderedFrames.map((frame) => frame.width), issues),
+      issueRanges: groupIssuesByRange(orderedProbes.map((probe) => probe.width), issues),
       summary: {
         errors: issues.filter((issue) => issue.severity === "error").length,
         warnings: issues.filter((issue) => issue.severity === "warning").length,
         info: issues.filter((issue) => issue.severity === "info").length,
-        sampledWidths: orderedFrames.length,
+        sampledWidths: orderedProbes.length,
       },
     };
   } finally {
@@ -196,6 +219,33 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
 
 export function scanAtWidths(url: string, widths: number[], options: Omit<ScanOptions, "exactWidths"> = {}): Promise<WidthWatchReport> {
   return scanResponsive(url, { ...options, exactWidths: widths });
+}
+
+type ReportScheduleOptions = Omit<ScanOptions,
+  | "exactWidths" | "probeWidths" | "minWidth" | "maxWidth" | "viewportHeight"
+  | "mode" | "screenshot" | "imageFormat" | "imageQuality" | "scrollSweep"
+  | "maxScrollSteps" | "settleMs" | "reloadPerWidth" | "hideSelectors"
+>;
+
+export function scanAtReportSchedule(url: string, baseline: WidthWatchReport, options: ReportScheduleOptions = {}): Promise<WidthWatchReport> {
+  if (baseline.capture.pageReady && !options.pageReady) throw new Error("This baseline requires the same pageReady hook and readinessKey to reproduce its report schedule.");
+  return scanResponsive(url, {
+    ...options,
+    exactWidths: baseline.frames.map((frame) => frame.width),
+    ...(baseline.probes?.length ? { probeWidths: baseline.probes.map((probe) => probe.width) } : {}),
+    minWidth: baseline.range.min,
+    maxWidth: baseline.range.max,
+    viewportHeight: baseline.range.height,
+    mode: baseline.capture.mode,
+    screenshot: baseline.capture.screenshot,
+    imageFormat: baseline.capture.imageFormat ?? "png",
+    imageQuality: baseline.capture.imageQuality,
+    scrollSweep: baseline.capture.scrollSweep,
+    maxScrollSteps: baseline.capture.maxScrollSteps,
+    settleMs: baseline.capture.settleMs,
+    reloadPerWidth: baseline.capture.reloadPerWidth,
+    hideSelectors: baseline.capture.hideSelectors,
+  });
 }
 
 async function sampleAdaptiveFrames<T extends FrameSignal>(
@@ -250,15 +300,23 @@ function selectVisualCaptureWidths(discovered: Map<number, FrameSignal>, target:
     transitionScores.set(right.width, Math.max(transitionScores.get(right.width) ?? 0, score));
   }
   while (selected.size < target) {
+    const coveredIssueKeys = new Set(frames.filter((frame) => selected.has(frame.width)).flatMap((frame) => frame.issues.map(issueIdentity)));
     const candidate = frames
       .filter((frame) => !selected.has(frame.width))
       .map((frame) => {
         const nearest = Math.min(...[...selected].map((width) => Math.abs(width - frame.width)));
         const coverage = nearest / Math.max(1, frames.at(-1)!.width - frames[0]!.width) * 100;
-        const issue = frame.issues.reduce((score, finding) => Math.max(score, finding.severity === "error" ? 300 : finding.severity === "warning" ? 180 : 60), 0);
-        return { width: frame.width, priority: issue + (transitionScores.get(frame.width) ?? 0) * 4 + coverage };
+        const uncovered = new Map<string, number>();
+        for (const finding of frame.issues) {
+          const identity = issueIdentity(finding);
+          if (coveredIssueKeys.has(identity)) continue;
+          const severity = finding.severity === "error" ? 3 : finding.severity === "warning" ? 2 : 1;
+          uncovered.set(identity, Math.max(uncovered.get(identity) ?? 0, severity));
+        }
+        const issuePriority = [...uncovered.values()].reduce((score, severity) => score + severity, 0);
+        return { width: frame.width, issuePriority, issueCount: uncovered.size, fallbackPriority: (transitionScores.get(frame.width) ?? 0) * 4 + coverage };
       })
-      .sort((a, b) => b.priority - a.priority || a.width - b.width)[0];
+      .sort((a, b) => b.issuePriority - a.issuePriority || b.issueCount - a.issueCount || b.fallbackPriority - a.fallbackPriority || a.width - b.width)[0];
     if (!candidate) break;
     selected.add(candidate.width);
   }
@@ -347,6 +405,7 @@ async function preparePage(page: Page, url: string, width: number, config: Resol
     }
     style.textContent = css;
   }, stabilizingCss);
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   if (config.pageReady) await withTimeout(Promise.resolve(config.pageReady(page, { url, width, phase })), config.pageReadyTimeoutMs, "pageReady hook");
   await page.evaluate(async () => { await document.fonts.ready; });
   if (phase === "capture") {
@@ -538,7 +597,7 @@ function seedWidths(min: number, max: number, step: number): number[] {
 }
 
 function issueFingerprint(frame: FrameSignal): string {
-  return frame.issues.map((issue) => `${issue.kind}:${issue.elements.map((element) => element.selector).join(",")}`).sort().join("|");
+  return frame.issues.map(issueIdentity).sort().join("|");
 }
 
 function transitionScore(left: FrameSignal, right: FrameSignal): number {
@@ -547,7 +606,7 @@ function transitionScore(left: FrameSignal, right: FrameSignal): number {
   return (left.layoutSignature === right.layoutSignature ? 0 : 20) + issueDelta + documentDelta;
 }
 
-function buildTransitions(frames: LayoutFrame[]): WidthTransition[] {
+function buildTransitions(frames: FrameSignal[]): WidthTransition[] {
   return frames.slice(0, -1).map((frame, index) => {
     const next = frames[index + 1]!;
     const score = transitionScore(frame, next);
@@ -555,7 +614,7 @@ function buildTransitions(frames: LayoutFrame[]): WidthTransition[] {
   });
 }
 
-function addLayoutJumpIssues(frames: LayoutFrame[], transitions: WidthTransition[]): void {
+function addLayoutJumpIssues(frames: FrameSignal[], transitions: WidthTransition[]): void {
   for (const transition of transitions) {
     if (!transition.changed || transition.to - transition.from > 24 || transition.score < 45) continue;
     const frame = frames.find((candidate) => candidate.width === transition.to);
@@ -570,6 +629,18 @@ function addLayoutJumpIssues(frames: LayoutFrame[], transitions: WidthTransition
       metrics: { score: transition.score },
     });
   }
+}
+
+function toProbe(frame: LayoutFrame): LayoutProbe {
+  const { screenshot: _screenshot, ...probe } = frame;
+  return probe;
+}
+
+function canonicalIssues(probes: LayoutProbe[], frames: LayoutFrame[]): ResponsiveIssue[] {
+  const issues = new Map<string, ResponsiveIssue>();
+  for (const issue of probes.flatMap((probe) => probe.issues)) issues.set(issueOccurrenceKey(issue), { ...issue, evidence: "discovery" });
+  for (const issue of frames.flatMap((frame) => frame.issues)) issues.set(issueOccurrenceKey(issue), { ...issue, evidence: "capture" });
+  return [...issues.values()].sort((a, b) => a.width - b.width || a.kind.localeCompare(b.kind) || issueIdentity(a).localeCompare(issueIdentity(b)));
 }
 
 function normalizeUrl(value: string): string {
@@ -610,5 +681,14 @@ function validateOptions(config: ResolvedScanOptions): void {
     if (new Set(config.exactWidths).size !== config.exactWidths.length) throw new Error("exactWidths must not contain duplicates.");
     if (config.exactWidths.some((width) => width < config.minWidth || width > config.maxWidth)) throw new Error("exactWidths must stay inside the configured width range.");
     config.exactWidths.sort((a, b) => a - b);
+  }
+  if (config.probeWidths) {
+    if (!config.exactWidths) throw new Error("probeWidths requires exactWidths.");
+    if (config.probeWidths.length < 1 || config.probeWidths.length > 100) throw new Error("probeWidths must contain between 1 and 100 widths.");
+    if (config.probeWidths.some((width) => !finiteInteger(width) || width < 240 || width > 3840)) throw new Error("probeWidths must contain whole pixels between 240 and 3840.");
+    if (new Set(config.probeWidths).size !== config.probeWidths.length) throw new Error("probeWidths must not contain duplicates.");
+    if (config.probeWidths.some((width) => width < config.minWidth || width > config.maxWidth)) throw new Error("probeWidths must stay inside the configured width range.");
+    if (config.exactWidths.some((width) => !config.probeWidths!.includes(width))) throw new Error("exactWidths must be a subset of probeWidths when both schedules are configured.");
+    config.probeWidths.sort((a, b) => a - b);
   }
 }

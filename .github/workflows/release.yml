@@ -43,7 +43,7 @@ jobs:
           WIDTHWATCH_BUDGET_ALERT_EMAIL: ${{ secrets.WIDTHWATCH_BUDGET_ALERT_EMAIL }}
           WIDTHWATCH_IMAGE_TAG: ${{ env.RELEASE_TAG }}
   publish-npm:
-    needs: deploy-api
+    needs: validate
     runs-on: ubuntu-latest
     environment: production
     permissions: { contents: read, id-token: write }
@@ -63,11 +63,18 @@ jobs:
             npm publish --workspace widthwatch
           fi
   github-release:
-    needs: publish-npm
+    needs: [deploy-api, publish-npm]
     runs-on: ubuntu-latest
     permissions: { contents: write }
     steps:
       - uses: actions/checkout@v6
         with: { ref: "${{ env.RELEASE_TAG }}" }
-      - run: gh release create "$RELEASE_TAG" --verify-tag --generate-notes --title "WidthWatch $RELEASE_TAG"
+      - name: Create GitHub Release when missing
+        shell: bash
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "$RELEASE_TAG already has a GitHub Release; continuing the idempotent release."
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --generate-notes --title "WidthWatch $RELEASE_TAG"
+          fi
         env: { GH_TOKEN: "${{ github.token }}" }

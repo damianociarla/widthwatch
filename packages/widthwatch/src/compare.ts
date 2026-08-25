@@ -1,7 +1,8 @@
 import pixelmatch from "pixelmatch";
 import { PNG } from "pngjs";
-import type { CompareOptions, ComparisonError, ComparisonReport, ResponsiveIssue, VisualDiff, WidthWatchReport } from "./types.js";
+import type { CompareOptions, ComparisonError, ComparisonReport, LayoutProbe, ResponsiveIssue, VisualDiff, WidthWatchReport } from "./types.js";
 import { groupIssuesByRange } from "./issue-ranges.js";
+import { issueOccurrenceKey } from "./issue-identity.js";
 
 export function compareReports(baseline: WidthWatchReport, candidate: WidthWatchReport, options: CompareOptions = {}): ComparisonReport {
   const threshold = options.threshold ?? 0.2;
@@ -10,9 +11,11 @@ export function compareReports(baseline: WidthWatchReport, candidate: WidthWatch
   if (!Number.isFinite(maxDiffRatio) || maxDiffRatio < 0 || maxDiffRatio > 1) throw new Error("maxDiffRatio must be between 0 and 1.");
   const baselineByWidth = new Map(baseline.frames.map((frame) => [frame.width, frame]));
   const candidateByWidth = new Map(candidate.frames.map((frame) => [frame.width, frame]));
+  const baselineProbes = reportProbes(baseline);
+  const candidateProbes = reportProbes(candidate);
   const diffs: VisualDiff[] = [];
   const regressions: ResponsiveIssue[] = [];
-  const validationErrors = validateCompatibility(baseline, candidate, baselineByWidth, candidateByWidth);
+  const validationErrors = validateCompatibility(baseline, candidate, baselineByWidth, candidateByWidth, baselineProbes, candidateProbes);
 
   for (const expected of baseline.frames) {
     const frame = candidateByWidth.get(expected.width);
@@ -56,12 +59,14 @@ export function compareReports(baseline: WidthWatchReport, candidate: WidthWatch
     }
   }
 
-  const baselineIssues = new Set(baseline.frames.flatMap((frame) => frame.issues.map(issueKey)));
-  const candidateIssues = new Set(candidate.frames.flatMap((frame) => frame.issues.map(issueKey)));
-  for (const issue of candidate.frames.flatMap((frame) => frame.issues)) {
+  const baselineFindings = reportIssues(baseline, baselineProbes);
+  const candidateFindings = reportIssues(candidate, candidateProbes);
+  const baselineIssues = new Set(baselineFindings.map(issueKey));
+  const candidateIssues = new Set(candidateFindings.map(issueKey));
+  for (const issue of candidateFindings) {
     if (!baselineIssues.has(issueKey(issue))) regressions.push(issue);
   }
-  const resolved = baseline.frames.flatMap((frame) => frame.issues).filter((issue) => !candidateIssues.has(issueKey(issue)));
+  const resolved = baselineFindings.filter((issue) => !candidateIssues.has(issueKey(issue)));
   const valid = validationErrors.length === 0;
   return {
     version: 1,
@@ -70,7 +75,7 @@ export function compareReports(baseline: WidthWatchReport, candidate: WidthWatch
     diffs,
     regressions,
     resolved,
-    regressionRanges: groupIssuesByRange(candidate.frames.map((frame) => frame.width), regressions),
+    regressionRanges: groupIssuesByRange(candidateProbes.map((probe) => probe.width), regressions),
     settings: { threshold, maxDiffRatio },
     valid,
     validationErrors,
@@ -83,6 +88,8 @@ function validateCompatibility(
   candidate: WidthWatchReport,
   baselineByWidth: Map<number, WidthWatchReport["frames"][number]>,
   candidateByWidth: Map<number, WidthWatchReport["frames"][number]>,
+  baselineProbes: LayoutProbe[],
+  candidateProbes: LayoutProbe[],
 ): ComparisonError[] {
   const errors: ComparisonError[] = [];
   if (baseline.range.min !== candidate.range.min || baseline.range.max !== candidate.range.max || baseline.range.height !== candidate.range.height) {
@@ -100,6 +107,13 @@ function validateCompatibility(
   if (changedCapture.length) {
     errors.push({ code: "capture-mismatch", message: `Capture settings differ or are missing in: ${changedCapture.join(", ")}.` });
   }
+  const baselineProbeWidths = baselineProbes.map((probe) => probe.width);
+  const candidateProbeWidths = candidateProbes.map((probe) => probe.width);
+  if (new Set(baselineProbeWidths).size !== baselineProbeWidths.length || new Set(candidateProbeWidths).size !== candidateProbeWidths.length) {
+    errors.push({ code: "duplicate-width", message: "A report contains duplicate probe widths." });
+  } else if (JSON.stringify(baselineProbeWidths) !== JSON.stringify(candidateProbeWidths)) {
+    errors.push({ code: "probe-schedule-mismatch", message: "Discovery probe schedules differ; reproduce the baseline probe schedule before comparing geometry findings." });
+  }
   if (baselineByWidth.size !== baseline.frames.length) errors.push({ code: "duplicate-width", message: "Baseline contains duplicate frame widths." });
   if (candidateByWidth.size !== candidate.frames.length) errors.push({ code: "duplicate-width", message: "Candidate contains duplicate frame widths." });
   for (const frame of baseline.frames) {
@@ -116,11 +130,19 @@ function validateCompatibility(
   return errors;
 }
 
+function reportProbes(report: WidthWatchReport): LayoutProbe[] {
+  return report.probes?.length ? report.probes : report.frames;
+}
+
+function reportIssues(report: WidthWatchReport, probes = reportProbes(report)): ResponsiveIssue[] {
+  return report.issues ?? probes.flatMap((probe) => probe.issues);
+}
+
 function decodePng(dataUrl: string): PNG {
   const encoded = dataUrl.slice(dataUrl.indexOf(",") + 1);
   return PNG.sync.read(Buffer.from(encoded, "base64"));
 }
 
 function issueKey(issue: ResponsiveIssue): string {
-  return `${issue.width}:${issue.kind}:${issue.elements.map((element) => element.selector).join(",")}`;
+  return issueOccurrenceKey(issue);
 }

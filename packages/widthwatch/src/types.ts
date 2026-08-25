@@ -32,6 +32,8 @@ export interface ResponsiveIssue {
   message: string;
   elements: ElementRef[];
   metrics?: Record<string, number>;
+  /** Whether this canonical occurrence was reproduced during visual capture or only observed during discovery. */
+  evidence?: "discovery" | "capture";
 }
 
 export interface ResponsiveIssueRange {
@@ -48,14 +50,17 @@ export interface ResponsiveIssueRange {
   elements: ElementRef[];
 }
 
-export interface LayoutFrame {
+export interface LayoutProbe {
   width: number;
   height: number;
   document: { width: number; height: number };
   layoutSignature: string;
   issues: ResponsiveIssue[];
-  screenshot: string;
   durationMs: number;
+}
+
+export interface LayoutFrame extends LayoutProbe {
+  screenshot: string;
 }
 
 export interface WidthTransition {
@@ -93,11 +98,15 @@ export interface WidthWatchReport {
     readinessKey: string | null;
   };
   sampling?: {
-    protocolVersion: 1;
-    strategy: "exact" | "adaptive-single-pass" | "adaptive-two-pass";
+    protocolVersion: 1 | 2;
+    strategy: "exact" | "planned-two-pass" | "adaptive-single-pass" | "adaptive-two-pass";
     discoveryWidths: number[];
     capturedWidths: number[];
   };
+  /** Every sampled geometry observation. Frames are the subset with visual evidence. Optional for schema-v1 compatibility. */
+  probes?: LayoutProbe[];
+  /** Canonical union of discovery and evidence findings. Optional for schema-v1 compatibility. */
+  issues?: ResponsiveIssue[];
   frames: LayoutFrame[];
   transitions: WidthTransition[];
   issueRanges?: ResponsiveIssueRange[];
@@ -115,6 +124,7 @@ export type ComparisonErrorCode =
   | "range-mismatch"
   | "environment-mismatch"
   | "capture-mismatch"
+  | "probe-schedule-mismatch"
   | "duplicate-width"
   | "missing-candidate-frame"
   | "unexpected-candidate-frame"
@@ -145,6 +155,8 @@ export interface ComparisonReport {
 export interface ScanOptions {
   mode?: "layout" | "visual";
   exactWidths?: number[];
+  /** Optional deterministic discovery schedule used with exactWidths to reproduce a two-pass baseline. */
+  probeWidths?: number[];
   minWidth?: number;
   maxWidth?: number;
   viewportHeight?: number;

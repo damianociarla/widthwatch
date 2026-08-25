@@ -1,4 +1,4 @@
-export { scanAtWidths, scanResponsive } from "./scanner.js";
+export { scanAtReportSchedule, scanAtWidths, scanResponsive } from "./scanner.js";
 export { compareReports } from "./compare.js";
 export { generateHtmlReport } from "./reporter.js";
 export { defineConfig, loadWidthWatchConfig } from "./config.js";
@@ -11,6 +11,7 @@ export type {
   ElementRef,
   IssueKind,
   LayoutFrame,
+  LayoutProbe,
   Rect,
   ResponsiveIssue,
   ResponsiveIssueRange,

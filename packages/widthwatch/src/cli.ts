@@ -69,6 +69,7 @@ async function main(): Promise<void> {
   if (baseline) {
     if (baseline.capture?.protocolVersion !== CAPTURE_PROTOCOL_VERSION) throw new Error("The baseline uses an unsupported capture protocol. Re-capture it with this WidthWatch version.");
     scanOptions.exactWidths = baseline.frames.map((frame) => frame.width);
+    if (baseline.probes?.length) scanOptions.probeWidths = baseline.probes.map((probe) => probe.width);
     scanOptions.viewportHeight = baseline.range.height;
     if (baseline.capture) {
       scanOptions.mode = baseline.capture.mode;

@@ -1,4 +1,5 @@
 import type { ResponsiveIssue, ResponsiveIssueRange, Severity } from "./types.js";
+import { issueIdentity } from "./issue-identity.js";
 
 export function groupIssuesByRange(widths: number[], issues: ResponsiveIssue[]): ResponsiveIssueRange[] {
   const orderedWidths = [...new Set(widths)].sort((a, b) => a - b);
@@ -28,10 +29,6 @@ export function groupIssuesByRange(widths: number[], issues: ResponsiveIssue[]):
     if (current.length) ranges.push(toRange(identity, current, ranges.length, orderedWidths, widthIndex));
   }
   return ranges.sort((a, b) => a.from - b.from || severityRank(b.severity) - severityRank(a.severity) || a.kind.localeCompare(b.kind));
-}
-
-function issueIdentity(issue: ResponsiveIssue): string {
-  return `${issue.kind}:${issue.elements.map((element) => element.selector).sort().join("|")}`;
 }
 
 function toRange(identity: string, issues: ResponsiveIssue[], index: number, orderedWidths: number[], widthIndex: Map<number, number>): ResponsiveIssueRange {

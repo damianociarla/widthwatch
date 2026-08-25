@@ -1,9 +1,21 @@
 {
   "name": "widthwatch",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Continuous responsive visual regression testing with adaptive viewport discovery",
   "type": "module",
   "license": "MIT",
+  "keywords": [
+    "visual-regression",
+    "responsive",
+    "playwright",
+    "screenshots",
+    "testing",
+    "ci"
+  ],
+  "homepage": "https://damianociarla.github.io/widthwatch/",
+  "bugs": {
+    "url": "https://github.com/damianociarla/widthwatch/issues"
+  },
   "bin": {
     "widthwatch": "dist/cli.js"
   },
@@ -40,7 +52,7 @@
     "@types/pngjs": "^6.0.5"
   },
   "engines": {
-    "node": ">=24"
+    "node": ">=22"
   },
   "publishConfig": {
     "access": "public",

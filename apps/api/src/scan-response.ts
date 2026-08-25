@@ -28,6 +28,10 @@ export async function holdConnectionUntilSettled(
 }
 
 export function scanStatusPayload(job: HostedScanJob): Record<string, unknown> {
+  const canonicalIssues = job.report?.issues ?? [
+    ...(job.report?.probes?.flatMap((probe) => probe.issues) ?? []),
+    ...(job.report?.frames.flatMap((frame) => frame.issues) ?? []),
+  ];
   return {
     id: job.id,
     status: job.status,
@@ -40,9 +44,15 @@ export function scanStatusPayload(job: HostedScanJob): Record<string, unknown> {
         durationMs: job.report.durationMs,
         range: job.report.range,
         sampling: job.report.sampling,
+        ...(job.report.probes?.length ? {
+          probes: job.report.probes.map((probe) => ({
+            width: probe.width,
+            severities: canonicalIssues.filter((issue) => issue.width === probe.width).map((issue) => issue.severity),
+          })),
+        } : {}),
         frames: job.report.frames.map((frame) => ({
           width: frame.width,
-          issues: frame.issues.map((issue) => ({ severity: issue.severity })),
+          issues: canonicalIssues.filter((issue) => issue.width === frame.width).map((issue) => ({ severity: issue.severity })),
         })),
         summary: job.report.summary,
       },

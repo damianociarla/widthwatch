@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { PNG } from "pngjs";
 import { compareReports } from "../dist/compare.js";
+import { issueIdentity } from "../dist/issue-identity.js";
 
 function screenshot(width = 2, height = 2, value = 0) {
   const png = new PNG({ width, height });
@@ -68,6 +69,23 @@ test("identical complete schedules produce a valid passing comparison", () => {
   assert.deepEqual(comparison.settings, { threshold: 0.2, maxDiffRatio: 0.001 });
 });
 
+test("finding identity is stable across selector order and excludes occurrence metadata", () => {
+  const first = {
+    id: "first",
+    kind: "element-overlap",
+    severity: "error",
+    width: 480,
+    message: "first",
+    elements: [
+      { selector: "#beta", tagName: "div", rect: { x: 0, y: 0, width: 1, height: 1 } },
+      { selector: "#alpha", tagName: "div", rect: { x: 0, y: 0, width: 1, height: 1 } },
+    ],
+  };
+  const second = { ...first, id: "second", width: 960, message: "second", elements: [...first.elements].reverse() };
+  assert.equal(issueIdentity(first), issueIdentity(second));
+  assert.notEqual(issueIdentity(first), issueIdentity({ ...second, kind: "element-overflow" }));
+});
+
 test("comparison reports new, resolved and ranged issues", () => {
   const baseline = report([320, 640]);
   const candidate = report([320, 640]);
@@ -83,7 +101,29 @@ test("missing and unexpected widths fail closed", () => {
   const comparison = compareReports(report([320]), report([321]));
   assert.equal(comparison.valid, false);
   assert.equal(comparison.passed, false);
-  assert.deepEqual(comparison.validationErrors.map((error) => error.code), ["range-mismatch", "missing-candidate-frame", "unexpected-candidate-frame"]);
+  assert.deepEqual(comparison.validationErrors.map((error) => error.code), ["range-mismatch", "probe-schedule-mismatch", "missing-candidate-frame", "unexpected-candidate-frame"]);
+});
+
+test("probe schedules fail closed independently from visual evidence schedules", () => {
+  const probe = (width) => ({ width, height: 800, document: { width, height: 1000 }, layoutSignature: "stable", issues: [], durationMs: 1 });
+  const baseline = report([320, 1120], { probes: [probe(320), probe(640), probe(1120)] });
+  const candidate = report([320, 1120], { probes: [probe(320), probe(1120)] });
+  const comparison = compareReports(baseline, candidate);
+  assert.equal(comparison.valid, false);
+  assert.ok(comparison.validationErrors.some((error) => error.code === "probe-schedule-mismatch"));
+});
+
+test("probe-only findings remain valid regressions without entering pixel decoding", () => {
+  const finding = { id: "probe-only", kind: "clipped-text", severity: "error", width: 640, message: "probe regression", elements: [{ selector: "#probe", tagName: "p", rect: { x: 0, y: 0, width: 20, height: 10 } }], evidence: "discovery" };
+  const probe = (width, issues = []) => ({ width, height: 800, document: { width, height: 1000 }, layoutSignature: "stable", issues, durationMs: 1 });
+  const baseline = report([320, 1120], { probes: [probe(320), probe(640), probe(1120)], issues: [] });
+  const candidate = report([320, 1120], { probes: [probe(320), probe(640, [finding]), probe(1120)], issues: [finding] });
+  const comparison = compareReports(baseline, candidate);
+  assert.equal(comparison.valid, true);
+  assert.equal(comparison.passed, false);
+  assert.deepEqual(comparison.regressions, [finding]);
+  assert.deepEqual(comparison.regressionRanges.map((range) => [range.from, range.to]), [[640, 640]]);
+  assert.equal(comparison.diffs.length, 2);
 });
 
 test("different PNG dimensions fail closed", () => {

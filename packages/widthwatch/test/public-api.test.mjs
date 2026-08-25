@@ -29,3 +29,15 @@ test("comparison reporter exposes the diff control only for generated diff evide
   const comparison = { version: 1, baseline: report, candidate: report, diffs: [{ width: 320, changedPixels: 1, ratio: 0.1, diffScreenshot: "data:image/png;base64,AA==" }], regressions: [], valid: true, validationErrors: [], passed: true };
   assert.match(generateHtmlReport(comparison), /data-view="diff"/);
 });
+
+test("reporter distinguishes geometry probes from visual evidence", () => {
+  const finding = { id: "probe-only", kind: "clipped-text", severity: "error", width: 640, message: "discovered", elements: [{ selector: "#probe", tagName: "p", rect: { x: 0, y: 0, width: 10, height: 10 } }], evidence: "discovery" };
+  const frame = { width: 320, height: 800, document: { width: 320, height: 800 }, layoutSignature: "x", issues: [], screenshot: "data:image/png;base64,", durationMs: 1 };
+  const report = { version: 1, url: "https://example.com/", title: "Example", scannedAt: new Date(0).toISOString(), durationMs: 1, range: { min: 320, max: 640, height: 800 }, environment: { browser: "test", platform: "test", packageVersion: "0.3.1" }, probes: [frame, { ...frame, width: 640, document: { width: 640, height: 800 }, issues: [finding] }], issues: [finding], frames: [frame], transitions: [], summary: { errors: 1, warnings: 0, info: 0, sampledWidths: 2 } };
+  const html = generateHtmlReport(report);
+  assert.match(html, /geometry probe/);
+  assert.match(html, /visual evidence/);
+  assert.match(html, /Detected during discovery; visual evidence was not captured/);
+  assert.match(html, /discovery only/);
+  assert.match(html, /probes\.findIndex/);
+});

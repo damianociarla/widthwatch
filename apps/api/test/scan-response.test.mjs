@@ -29,6 +29,7 @@ test("hosted status excludes screenshot payloads", () => {
       durationMs: 100,
       range: { min: 320, max: 1440, height: 800 },
       environment: { browser: "Chromium", platform: "test", packageVersion: "0.1.0" },
+      probes: [{ width: 640, height: 800, document: { width: 640, height: 800 }, layoutSignature: "b", issues: [{ id: "secret", kind: "clipped-text", severity: "error", width: 640, message: "private text", elements: [{ selector: "#private", tagName: "p", rect: { x: 0, y: 0, width: 1, height: 1 } }] }], durationMs: 1 }],
       frames: [{ width: 320, height: 800, document: { width: 320, height: 800 }, layoutSignature: "a", issues: [], screenshot: "data:image/png;base64,large", durationMs: 1 }],
       transitions: [],
       summary: { errors: 0, warnings: 0, info: 0, sampledWidths: 1 },
@@ -36,5 +37,7 @@ test("hosted status excludes screenshot payloads", () => {
   };
   const payload = scanStatusPayload(job);
   assert.equal(JSON.stringify(payload).includes("base64"), false);
+  assert.equal(JSON.stringify(payload).includes("#private"), false);
+  assert.deepEqual(payload.report.probes, [{ width: 640, severities: ["error"] }]);
   assert.equal(payload.reportUrl, "/v1/reports/scan-1");
 });

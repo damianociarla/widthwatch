@@ -43,23 +43,19 @@ The engine returns versioned TypeScript objects, renders a portable interactive 
 
 ```ts
 import {
-  scanAtWidths,
+  scanAtReportSchedule,
   scanResponsive,
   compareReports,
   generateHtmlReport,
   type WidthWatchReport,
 } from "widthwatch";
 
-const candidate: WidthWatchReport = await scanAtWidths(
+const candidate: WidthWatchReport = await scanAtReportSchedule(
   "http://localhost:4173",
-  baseline.frames.map((frame) => frame.width),
+  baseline,
   {
-    viewportHeight: baseline.range.height,
-    mode: "visual",
-    reloadPerWidth: true,
     pageReady: (page) => page.waitForSelector("[data-app-ready]"),
     readinessKey: "app-ready-v1",
-    hideSelectors: ["[data-live-clock]"],
   },
 );
 
@@ -85,7 +81,7 @@ npx widthwatch "$CANDIDATE_URL" \
 
 Baseline and candidate must run in the same pinned browser container. Browser rendering can vary by operating system, fonts, browser version and other host details; a visual threshold cannot compensate for unrelated environments.
 
-The CLI uses correctness-first visual capture and reloads each width. Adaptive visual scans probe up to 24 widths geometrically, then use `--max-captures` (default 8) to bound the expensive full-page evidence schedule. Exact-width baseline comparisons always capture every required width. For a fast diagnostic probe that only inspects the viewport, use `--layout-only`; add `--reload-per-width` when a layout-only application calculates responsive state only during startup.
+The CLI uses correctness-first visual capture and reloads each width. Adaptive visual scans probe up to 24 widths geometrically, then use `--max-captures` (default 8) to bound the expensive full-page evidence schedule. Every discovery finding remains in `report.probes` and the canonical `report.issues`, even when its width has no screenshot. Baseline comparisons reproduce both the probe schedule and the evidence schedule. For a fast diagnostic probe that only inspects the viewport, use `--layout-only`; add `--reload-per-width` when a layout-only application calculates responsive state only during startup.
 
 The generated workflow is deliberately read-only and uploads the portable report as an artifact. It accepts a deployed preview URL through `workflow_call` or manual dispatch, and never uses `pull_request_target`. Connect it to the step that already deploys your application preview.
 

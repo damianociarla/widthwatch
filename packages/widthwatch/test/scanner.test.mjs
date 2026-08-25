@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import test from "node:test";
 import { PNG } from "pngjs";
-import { scanAtWidths, scanResponsive } from "../dist/scanner.js";
+import { scanAtReportSchedule, scanAtWidths, scanResponsive } from "../dist/scanner.js";
 
 async function fixture(context, handler) {
   const server = createServer(handler);
@@ -29,6 +29,7 @@ test("invalid numeric options fail before launching a browser", async () => {
   await assert.rejects(scanResponsive("https://example.com", { maxRequestsPerNavigation: 0 }), /maxRequestsPerNavigation/);
   await assert.rejects(scanResponsive("https://example.com", { maxTotalRequests: 0 }), /maxTotalRequests/);
   await assert.rejects(scanResponsive("https://example.com", { pageReady: async () => {} }), /readinessKey/);
+  await assert.rejects(scanResponsive("https://example.com", { exactWidths: [320, 640], probeWidths: [320] }), /subset/);
 });
 
 test("scanAtWidths captures exactly the requested deterministic schedule", async (context) => {
@@ -36,8 +37,9 @@ test("scanAtWidths captures exactly the requested deterministic schedule", async
   const result = await scanAtWidths(url, [777, 321], { viewportHeight: 480, settleMs: 0 });
   assert.deepEqual(result.frames.map((frame) => frame.width), [321, 777]);
   assert.deepEqual(result.range, { min: 321, max: 777, height: 480 });
-  assert.equal(result.capture.protocolVersion, 2);
-  assert.deepEqual(result.sampling, { protocolVersion: 1, strategy: "exact", discoveryWidths: [], capturedWidths: [321, 777] });
+  assert.equal(result.capture.protocolVersion, 3);
+  assert.deepEqual(result.sampling, { protocolVersion: 2, strategy: "exact", discoveryWidths: [], capturedWidths: [321, 777] });
+  assert.equal(result.probes, undefined);
 });
 
 test("adaptive visual scans discover broadly and capture a bounded final schedule", async (context) => {
@@ -91,6 +93,28 @@ test("maxCaptureSamples remains a hard cap when every discovery probe has a find
   const result = await scanResponsive(url, { mode: "visual", minWidth: 320, maxWidth: 1120, initialStep: 160, maxSamples: 6, maxCaptureSamples: 3, viewportHeight: 480, settleMs: 0, scrollSweep: false });
   assert.equal(result.sampling.discoveryWidths.length, 6);
   assert.equal(result.frames.length, 3);
+  assert.equal(result.probes.length, 6);
+  assert.equal(result.issues.filter((issue) => issue.kind === "clipped-text").length, 6);
+  assert.ok(result.issues.some((issue) => issue.evidence === "discovery" && !result.frames.some((frame) => frame.width === issue.width)));
+  assert.equal(result.summary.errors, 6);
+  assert.deepEqual(result.issueRanges.map((range) => [range.from, range.to, range.occurrences]), [[320, 1120, 6]]);
+});
+
+test("evidence selection covers distinct finding identities before transition-only widths", async (context) => {
+  const url = await fixture(context, (_request, response) => html(response, `
+    <style>
+      .finding{display:none;width:20px;white-space:nowrap;overflow:hidden}
+      @media(min-width:450px) and (max-width:550px){#first{display:block}}
+      @media(min-width:610px) and (max-width:690px){#second{display:block}}
+      @media(min-width:770px) and (max-width:830px){#third{display:block}}
+    </style>
+    <p class="finding" id="first">first clipped content</p>
+    <p class="finding" id="second">second clipped content</p>
+    <p class="finding" id="third">third clipped content</p>
+  `));
+  const result = await scanResponsive(url, { mode: "visual", minWidth: 320, maxWidth: 1120, initialStep: 160, maxSamples: 6, maxCaptureSamples: 5, viewportHeight: 480, settleMs: 0, scrollSweep: false });
+  assert.deepEqual(result.frames.map((frame) => frame.width), [320, 480, 640, 800, 1120]);
+  assert.deepEqual(new Set(result.issues.filter((issue) => issue.evidence === "capture").map((issue) => issue.elements[0]?.selector)), new Set(["#first", "#second", "#third"]));
 });
 
 test("visual evidence prioritizes a sampled error while preserving range endpoints", async (context) => {
@@ -139,8 +163,32 @@ test("visual mode scrolls through lazy content and captures the full page", asyn
   `));
   const result = await scanAtWidths(url, [320], { viewportHeight: 480, settleMs: 5, mode: "visual", maxScrollSteps: 6 });
   assert.ok(result.frames[0].issues.some((issue) => issue.kind === "clipped-text" && issue.elements[0]?.selector === "#lazy"));
+  assert.ok(result.issues.some((issue) => issue.kind === "clipped-text" && issue.elements[0]?.selector === "#lazy" && issue.evidence === "capture"));
   const png = PNG.sync.read(Buffer.from(result.frames[0].screenshot.split(",")[1], "base64"));
   assert.ok(png.height > 480);
+});
+
+test("settleMs zero still waits for resize animation frames", async (context) => {
+  const url = await fixture(context, (_request, response) => html(response, `
+    <body data-observed="0"><script>document.body.dataset.observed=String(innerWidth);addEventListener('resize',()=>requestAnimationFrame(()=>{document.body.dataset.observed=String(innerWidth)}))</script>
+  `));
+  const observed = [];
+  await scanAtWidths(url, [320, 480, 1120], {
+    mode: "layout",
+    settleMs: 0,
+    pageReady: async (page, { width }) => observed.push([width, await page.evaluate(() => Number(document.body.dataset.observed))]),
+    readinessKey: "resize-raf-v1",
+  });
+  assert.deepEqual(observed, [[320, 320], [480, 480], [1120, 1120]]);
+});
+
+test("scanAtReportSchedule reproduces probe and evidence schedules", async (context) => {
+  const url = await fixture(context, (_request, response) => html(response, "<main>stable</main>"));
+  const baseline = await scanResponsive(url, { mode: "visual", minWidth: 320, maxWidth: 1120, initialStep: 160, maxSamples: 6, maxCaptureSamples: 3, viewportHeight: 480, settleMs: 0, scrollSweep: false });
+  const candidate = await scanAtReportSchedule(url, baseline);
+  assert.equal(candidate.sampling.strategy, "planned-two-pass");
+  assert.deepEqual(candidate.probes.map((probe) => probe.width), baseline.probes.map((probe) => probe.width));
+  assert.deepEqual(candidate.frames.map((frame) => frame.width), baseline.frames.map((frame) => frame.width));
 });
 
 test("pageReady waits for application-specific asynchronous state", async (context) => {

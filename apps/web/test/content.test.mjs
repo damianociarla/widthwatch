@@ -15,7 +15,7 @@ test("landing exposes the scanner, docs and published package command", async ()
   assert.match(html, /application\/ld\+json/);
   assert.match(html, /og-widthwatch\.png/);
   assert.match(html, /summary_large_image/);
-  assert.match(html, /softwareVersion":"0\.3\.0/);
+  assert.match(html, /softwareVersion":"0\.3\.1/);
   assert.match(html, /id="navToggle"/);
   assert.match(html, /Reproducible evidence/);
   assert.match(html, /href="\.\/proof\.html"/);
@@ -39,4 +39,14 @@ test("production artifact includes real proof fixtures and comparison report", a
   assert.match(proof, /Observed at 742—811px/);
   assert.match(proof, /clipped-text/);
   assert.match(candidate, /min-width:742px/);
+});
+
+test("public scanner serializes runs and the landing exposes visible keyboard focus", async () => {
+  const source = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+  assert.match(source, /new AbortController/);
+  assert.match(source, /submitButton\.disabled = true/);
+  assert.match(source, /run !== scanRun/);
+  assert.match(styles, /:focus-visible/);
+  assert.match(styles, /outline-offset/);
 });
