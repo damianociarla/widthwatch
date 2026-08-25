@@ -12,7 +12,9 @@ The scan admission response remains open while the in-process browser is active.
 
 The package remains the product. The hosted demo is a constrained preview, not a free remote browser farm.
 
-HTTP admission is a deep in-process module with one request interface. It owns routing, bounded JSON parsing, typed client-error mapping, CORS, origin verification, public-target policy, capacity, rate limits, queue state and retention. App Runner startup is a small production adapter; integration tests use an ephemeral listener and controlled scan, DNS, report and clock adapters while crossing the same HTTP seam. The pinned egress proxy is tested against real local HTTP and TCP upstreams through injected resolution and connection adapters. Its HTTPS contract covers the CONNECT handshake, pre-read head forwarding, bidirectional traffic, pinned-address fallback and coordinated socket closure.
+HTTP admission is a deep in-process module with one request interface. It owns routing, bounded JSON parsing, typed client-error mapping, CORS, origin verification, public-target policy, capacity, rate limits, queue state and retention. App Runner startup is a small production adapter; integration tests use an ephemeral listener and controlled scan, DNS, report and clock adapters while crossing the same HTTP seam.
+
+Each accepted job runs in a bounded egress session that owns a fresh pinned proxy, one byte allowance, browser cancellation and deterministic cleanup. Plain HTTP rejects oversized `Content-Length` before body transfer and meters chunked bodies. CONNECT remains opaque by design: it meters raw encrypted bytes in both directions, including the pre-read head, rather than claiming to identify HTTPS response boundaries. Defaults are 10 MiB per visible HTTP response, 25 MiB per tunnel and 75 MiB total transferred payload per job. Exhaustion destroys every session socket, aborts the scanner through `AbortSignal`, closes Chromium and fails the hosted job closed. Real HTTP, TCP and Chromium tests cross the same seams used in production.
 
 ## Continuous-width engine
 
@@ -40,7 +42,7 @@ GitHub Pages → CloudFront → AWS WAF → App Runner (max 1 instance / concurr
 
 CloudFront injects a private origin header; the direct App Runner URL answers scan routes with `404`. WAF provides edge rate limiting and managed common rules. The application then applies separate atomic-in-process client, target, global, queue and job caps. The public surface cannot make AWS scale past one instance. App Runner's runtime role can only read and write the `reports/` prefix of its private bucket; lifecycle deletion is enforced by S3.
 
-Coverage gates are local to each risk-bearing module. The engine retains aggregate thresholds, HTTP admission and public-target policy have stricter focused thresholds, and the egress proxy requires 95% lines, 80% branches and 80% functions. The web client is measured in Chromium against its original TypeScript through temporary source maps. Only the process-startup adapter is excluded from API coverage.
+Coverage gates are local to each risk-bearing module. The engine retains aggregate thresholds, HTTP admission and public-target policy have stricter focused thresholds, and the egress proxy requires 95% lines, 80% branches and 80% functions. The byte allowance requires 100% lines/functions and 95% branches; hosted execution requires 95% lines, 85% branches and 100% functions. The web client is measured in Chromium against its original TypeScript through temporary source maps. Only the process-startup adapter is excluded from API coverage.
 
 For a paid or multi-tenant product, replace the in-memory queue with DynamoDB + SQS and run one isolated ECS Fargate task per accepted job. Fargate tasks must remain behind an admission quota and a strict maximum task count; an unbounded queue only delays a cost attack rather than preventing it.
 

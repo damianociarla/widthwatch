@@ -11,7 +11,7 @@ function report(url = "https://example.com/") {
     scannedAt: new Date(0).toISOString(),
     durationMs: 1,
     range: { min: 320, max: 320, height: 800 },
-    environment: { browser: "test", platform: "test", packageVersion: "0.4.4" },
+    environment: { browser: "test", platform: "test", packageVersion: "0.4.5" },
     frames: [
       {
         width: 320,
@@ -33,7 +33,6 @@ async function fixture(t, options = {}) {
   const stored = new Map();
   let ids = 0;
   const adapters = {
-    proxyUrl: "http://127.0.0.1:1",
     scan: async (url, scanOptions) => {
       scans.push({ url, scanOptions });
       return report(url);
@@ -151,7 +150,7 @@ test("HTTP admission runs a scan and serves status plus a protected report", asy
   assert.equal(body.pollUrl, "/v1/scans/abc-1");
   assert.equal(scans.length, 1);
   assert.equal(scans[0].scanOptions.maxSamples, 5);
-  assert.equal(scans[0].scanOptions.proxyServer, "http://127.0.0.1:1");
+  assert.equal(scans[0].scanOptions.proxyServer, undefined);
 
   const status = await fetch(`${origin}${body.pollUrl}`);
   assert.equal(status.status, 200);

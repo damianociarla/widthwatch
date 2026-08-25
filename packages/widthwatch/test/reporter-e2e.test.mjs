@@ -26,7 +26,7 @@ function report(issues, frames) {
     scannedAt: new Date(0).toISOString(),
     durationMs: 10,
     range: { min: 800, max: 1200, height: 800 },
-    environment: { browser: "chromium", platform: "test", packageVersion: "0.4.4" },
+    environment: { browser: "chromium", platform: "test", packageVersion: "0.4.5" },
     sampling: {
       protocolVersion: 2,
       strategy: "adaptive-two-pass",

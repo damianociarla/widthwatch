@@ -44,9 +44,10 @@ interface ResolvedScanOptions {
   maxTotalRequests: number;
   proxyServer: string | undefined;
   allowedUrl: ScanOptions["allowedUrl"] | undefined;
+  signal: AbortSignal | undefined;
 }
 
-const defaults: Omit<ResolvedScanOptions, "allowedUrl" | "exactWidths" | "probeWidths" | "pageReady" | "readinessKey"> = {
+const defaults: Omit<ResolvedScanOptions, "allowedUrl" | "exactWidths" | "probeWidths" | "pageReady" | "readinessKey" | "signal"> = {
   mode: "visual",
   minWidth: 320,
   maxWidth: 1440,
@@ -98,18 +99,23 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
     readinessKey: options.readinessKey,
     allowedUrl: options.allowedUrl,
     proxyServer: options.proxyServer,
+    signal: options.signal,
     maxRequestsPerNavigation: options.maxRequestsPerNavigation ?? options.maxRequests ?? defaults.maxRequestsPerNavigation,
     maxTotalRequests: options.maxTotalRequests ?? options.maxRequests ?? defaults.maxTotalRequests,
     maxCaptureSamples: Math.min(options.maxCaptureSamples ?? defaults.maxCaptureSamples, options.maxSamples ?? defaults.maxSamples),
   };
   validateOptions(config);
+  throwIfAborted(config.signal);
   const normalizedUrl = normalizeUrl(url);
   if (config.allowedUrl && !(await config.allowedUrl(normalizedUrl))) throw new Error("URL rejected by the configured network policy.");
 
   const started = Date.now();
   const browser = await chromium.launch({ headless: config.headless, ...(config.proxyServer ? { proxy: { server: config.proxyServer } } : {}) });
+  const abortBrowser = () => void browser.close().catch(() => {});
+  config.signal?.addEventListener("abort", abortBrowser, { once: true });
   let context: BrowserContext | undefined;
   try {
+    throwIfAborted(config.signal);
     const requestBudget: RequestBudget = { perNavigation: 0, total: 0 };
     context = await createScanContext(browser, config, requestBudget);
     let page = await context.newPage();
@@ -208,10 +214,22 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
         sampledWidths: orderedProbes.length,
       },
     };
+  } catch (error) {
+    if (config.signal?.aborted) throw abortReason(config.signal, error);
+    throw error;
   } finally {
-    await context?.close();
-    await browser.close();
+    config.signal?.removeEventListener("abort", abortBrowser);
+    await context?.close().catch(() => {});
+    await browser.close().catch(() => {});
   }
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw abortReason(signal);
+}
+
+function abortReason(signal: AbortSignal, cause?: unknown): Error {
+  return signal.reason instanceof Error ? signal.reason : new Error("WidthWatch scan aborted.", { cause });
 }
 
 export function scanAtWidths(url: string, widths: number[], options: Omit<ScanOptions, "exactWidths"> = {}): Promise<WidthWatchReport> {

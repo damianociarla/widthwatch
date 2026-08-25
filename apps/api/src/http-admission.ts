@@ -10,7 +10,6 @@ import { API_VERSION } from "./version.js";
 type Job = { id: string; url: string; createdAt: number; status: HostedScanStatus; report?: WidthWatchReport; reportHtml?: string; error?: string };
 
 export interface HttpAdmissionAdapters {
-  proxyUrl: string;
   scan(url: string, options: ScanOptions): Promise<WidthWatchReport>;
   acceptTarget(value: string): Promise<URL>;
   allowResource(value: string): Promise<boolean>;
@@ -171,7 +170,6 @@ export function createHttpAdmissionServer(adapters: HttpAdmissionAdapters, confi
           maxRequestsPerNavigation: 200,
           maxTotalRequests: 1_000,
           blockResourceTypes: ["media", "websocket"],
-          proxyServer: adapters.proxyUrl,
           allowedUrl: adapters.allowResource,
         });
         job.reportHtml = generateHtmlReport(job.report);

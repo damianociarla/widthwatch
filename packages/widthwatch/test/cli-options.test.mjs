@@ -44,7 +44,15 @@ test("built CLI exposes help and version successfully", () => {
     const result = spawnSync(process.execPath, [fileURLToPath(new URL("../dist/cli.js", import.meta.url)), argument], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr);
     assert.ok(result.stdout.trim());
+    if (argument === "--help") assert.match(result.stdout, /--full-page.*layout mode keeps scroll sweep off/);
   }
+});
+
+test("CLI documents layout-only full-page as a viewport-policy override", () => {
+  const parsed = parseCliOptions(["--layout-only", "--full-page", "https://example.com"]);
+  const options = applyCliScanOptions(undefined, parsed);
+  assert.equal(options.mode, "layout");
+  assert.equal(options.screenshot, "full-page");
 });
 
 test("widthwatch init creates a typed config and reusable workflow without overwriting", async (context) => {

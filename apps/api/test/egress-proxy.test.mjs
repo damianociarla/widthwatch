@@ -2,8 +2,17 @@ import assert from "node:assert/strict";
 import { createServer, request as httpRequest } from "node:http";
 import { connect, createServer as createTcpServer } from "node:net";
 import test from "node:test";
+import { EgressTransferBudget } from "../dist/egress-budget.js";
 import { connectPinned, startPinnedEgressProxy } from "../dist/egress-proxy.js";
 import { UnsafeUrlError } from "../dist/network-policy.js";
+
+const generousLimits = { maxBytesPerResponse: 1024 * 1024, maxBytesPerTunnel: 1024 * 1024, maxTransferredBytes: 2 * 1024 * 1024 };
+
+async function startTestProxy(resolveTarget, connectTarget, limits = generousLimits) {
+  const budget = new EgressTransferBudget(limits);
+  const proxy = await startPinnedEgressProxy({ budget, resolveTarget, connectTarget });
+  return { ...proxy, budget };
+}
 
 async function listen(t, server) {
   await new Promise((resolve, reject) => {
@@ -86,7 +95,7 @@ test("pinned egress proxy forwards HTTP through the resolved address and strips 
       response.writeHead(200, { "content-type": "text/plain" }).end("upstream ok");
     }),
   );
-  const proxy = await startPinnedEgressProxy(async (value) => {
+  const proxy = await startTestProxy(async (value) => {
     const url = new URL(value);
     if (url.hostname !== "public.example") throw new UnsafeUrlError();
     return { url, addresses: ["127.0.0.1"] };
@@ -99,8 +108,73 @@ test("pinned egress proxy forwards HTTP through the resolved address and strips 
   assert.deepEqual(received, [{ url: "/asset?q=1", proxyAuthorization: undefined }]);
 });
 
+test("pinned egress proxy rejects an oversized HTTP Content-Length before body transfer", async (t) => {
+  let bodyStarted = false;
+  const upstreamPort = await listen(
+    t,
+    createServer((_request, response) => {
+      response.writeHead(200, { "content-length": "20" });
+      response.flushHeaders();
+      setTimeout(() => {
+        if (!response.destroyed) {
+          bodyStarted = true;
+          response.end("x".repeat(20));
+        }
+      }, 50);
+    }),
+  );
+  const proxy = await startTestProxy(async (value) => ({ url: new URL(value), addresses: ["127.0.0.1"] }), undefined, {
+    maxBytesPerResponse: 10,
+    maxBytesPerTunnel: 50,
+    maxTransferredBytes: 100,
+  });
+  t.after(() => proxy.close());
+  const request = proxyRequest(proxy.url, `http://public.example:${upstreamPort}/large`).catch(() => undefined);
+  await new Promise((resolve) => proxy.budget.signal.addEventListener("abort", resolve, { once: true }));
+  await request;
+  assert.equal(bodyStarted, false);
+  assert.equal(proxy.budget.error.scope, "response");
+  assert.equal(proxy.budget.error.observedBytes, 20);
+  assert.equal(proxy.budget.transferredBytes, 0);
+});
+
+test("pinned egress proxy meters chunked HTTP bodies and a shared job total", async (t) => {
+  const upstreamPort = await listen(
+    t,
+    createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/octet-stream" });
+      response.write("123456");
+      response.end("abcdef");
+    }),
+  );
+  const responseProxy = await startTestProxy(async (value) => ({ url: new URL(value), addresses: ["127.0.0.1"] }), undefined, {
+    maxBytesPerResponse: 10,
+    maxBytesPerTunnel: 50,
+    maxTransferredBytes: 100,
+  });
+  t.after(() => responseProxy.close());
+  const oversized = proxyRequest(responseProxy.url, `http://public.example:${upstreamPort}/chunked`).catch(() => undefined);
+  await new Promise((resolve) => responseProxy.budget.signal.addEventListener("abort", resolve, { once: true }));
+  await oversized;
+  assert.equal(responseProxy.budget.error.scope, "response");
+  assert.equal(responseProxy.budget.error.observedBytes, 12);
+
+  const totalProxy = await startTestProxy(async (value) => ({ url: new URL(value), addresses: ["127.0.0.1"] }), undefined, {
+    maxBytesPerResponse: 20,
+    maxBytesPerTunnel: 20,
+    maxTransferredBytes: 20,
+  });
+  t.after(() => totalProxy.close());
+  assert.equal((await proxyRequest(totalProxy.url, `http://public.example:${upstreamPort}/one`)).body, "123456abcdef");
+  const totalExceeded = proxyRequest(totalProxy.url, `http://public.example:${upstreamPort}/two`).catch(() => undefined);
+  await new Promise((resolve) => totalProxy.budget.signal.addEventListener("abort", resolve, { once: true }));
+  await totalExceeded;
+  assert.equal(totalProxy.budget.error.scope, "total");
+  assert.equal(totalProxy.budget.transferredBytes, 24);
+});
+
 test("pinned egress proxy returns 403 when target policy rejects HTTP", async (t) => {
-  const proxy = await startPinnedEgressProxy(async () => {
+  const proxy = await startTestProxy(async () => {
     throw new UnsafeUrlError();
   });
   t.after(() => proxy.close());
@@ -125,7 +199,7 @@ test("pinned egress proxy tunnels CONNECT through a fallback IP and closes both 
   });
   const upstreamPort = await listen(t, upstream);
   const connectionAttempts = [];
-  const proxy = await startPinnedEgressProxy(
+  const proxy = await startTestProxy(
     async (value) => {
       const url = new URL(value);
       assert.equal(url.toString(), "https://public.example/");
@@ -153,7 +227,7 @@ test("closing a CONNECT client closes the pinned upstream socket", async (t) => 
   });
   const upstream = createTcpServer((socket) => socket.once("close", resolveUpstreamClosed));
   const upstreamPort = await listen(t, upstream);
-  const proxy = await startPinnedEgressProxy(
+  const proxy = await startTestProxy(
     async (value) => ({ url: new URL(value), addresses: ["127.0.0.1"] }),
     (addresses, port) => {
       assert.equal(port, 443);
@@ -179,8 +253,31 @@ test("closing a CONNECT client closes the pinned upstream socket", async (t) => 
   await upstreamClosed;
 });
 
+test("pinned egress proxy counts CONNECT head bytes and aborts the whole tunnel once", async (t) => {
+  const upstream = createTcpServer(() => {});
+  const upstreamPort = await listen(t, upstream);
+  const proxy = await startTestProxy(
+    async (value) => ({ url: new URL(value), addresses: ["127.0.0.1"] }),
+    (addresses, port) => {
+      assert.equal(port, 443);
+      return connectPinned(addresses, upstreamPort);
+    },
+    { maxBytesPerResponse: 8, maxBytesPerTunnel: 8, maxTransferredBytes: 20 },
+  );
+  t.after(() => proxy.close());
+  let aborts = 0;
+  proxy.budget.signal.addEventListener("abort", () => (aborts += 1));
+  const request = rawProxyRequest(proxy.url, "CONNECT public.example:443 HTTP/1.1\r\nHost: public.example:443\r\n\r\nhead-data").catch(() => undefined);
+  await new Promise((resolve) => proxy.budget.signal.addEventListener("abort", resolve, { once: true }));
+  await request;
+  assert.equal(proxy.budget.error.scope, "tunnel");
+  assert.equal(proxy.budget.error.observedBytes, 9);
+  assert.equal(proxy.budget.transferredBytes, 9);
+  assert.equal(aborts, 1);
+});
+
 test("pinned egress proxy rejects unsafe CONNECT ports and protocol upgrades", async (t) => {
-  const proxy = await startPinnedEgressProxy(async () => {
+  const proxy = await startTestProxy(async () => {
     throw new Error("resolver must not run");
   });
   t.after(() => proxy.close());

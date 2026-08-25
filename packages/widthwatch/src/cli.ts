@@ -26,6 +26,7 @@ Options:
   --max-samples <n>     Adaptive sample budget (default: 24)
   --max-captures <n>    Visual evidence budget after discovery (default: 8)
   --layout-only         Fast viewport probe without scroll sweep
+  --full-page           Full document capture (visual default; layout mode keeps scroll sweep off)
   --reload-per-width    Reload the page at every captured width
   --fail-on-regression  Exit with status 1 when errors regress
   --version             Print package version`;

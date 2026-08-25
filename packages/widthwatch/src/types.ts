@@ -188,6 +188,8 @@ export interface ScanOptions {
   maxTotalRequests?: number;
   proxyServer?: string;
   allowedUrl?: (url: string) => boolean | Promise<boolean>;
+  /** Cancels an active scan and closes its browser resources. */
+  signal?: AbortSignal;
 }
 
 export interface CompareOptions {

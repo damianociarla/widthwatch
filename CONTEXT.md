@@ -27,3 +27,7 @@ The pair of ordered width schedules used by a report: all probe widths and the e
 ## HTTP admission
 
 The request lifecycle that accepts a hosted public scan. HTTP admission owns JSON limits, origin verification, CORS, public-target policy, capacity, rate limits, queue state and status semantics; it delegates responsive scanning and report persistence to adapters.
+
+## Bounded egress session
+
+The job-scoped execution lifecycle for one hosted scan. A bounded egress session owns its pinned proxy, byte allowance, browser cancellation and transport cleanup. Plain HTTP responses have individual body limits; opaque HTTPS connections have tunnel limits; both protocols share one hard transferred-byte limit for the job.

@@ -32,6 +32,28 @@ test("invalid numeric options fail before launching a browser", async () => {
   await assert.rejects(scanResponsive("https://example.com", { exactWidths: [320, 640], probeWidths: [320] }), /subset/);
 });
 
+test("an external AbortSignal closes an active browser scan and preserves its reason", async (context) => {
+  let resolveRequestStarted;
+  const requestStarted = new Promise((resolve) => {
+    resolveRequestStarted = resolve;
+  });
+  const reason = new Error("Hosted egress byte budget exceeded.");
+  const controller = new AbortController();
+  const url = await fixture(context, (_request, response) => {
+    response.writeHead(200, { "content-type": "text/html" });
+    response.write("<!doctype html><title>streaming</title>");
+    resolveRequestStarted();
+  });
+  const scanning = scanAtWidths(url, [320], { mode: "layout", timeoutMs: 10_000, settleMs: 0, signal: controller.signal });
+  await requestStarted;
+  controller.abort(reason);
+  await assert.rejects(scanning, (error) => error === reason);
+
+  const alreadyAborted = new AbortController();
+  alreadyAborted.abort(reason);
+  await assert.rejects(scanResponsive(url, { signal: alreadyAborted.signal }), (error) => error === reason);
+});
+
 test("scanAtWidths captures exactly the requested deterministic schedule", async (context) => {
   const url = await fixture(context, (_request, response) => html(response, "<title>Fixture</title><main>stable</main>"));
   const result = await scanAtWidths(url, [777, 321], { viewportHeight: 480, settleMs: 0 });

@@ -1,15 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { scanResponsive } from "widthwatch";
-import { startPinnedEgressProxy } from "./egress-proxy.js";
+import { createHostedScanRunner, hostedScanConfig } from "./hosted-scan.js";
 import { createHttpAdmissionServer, httpAdmissionConfig } from "./http-admission.js";
 import { assertPublicUrl, resolvePublicTarget } from "./network-policy.js";
 import { ReportStore } from "./report-store.js";
 
-const proxy = await startPinnedEgressProxy();
+const hostedScan = createHostedScanRunner({ scan: scanResponsive, resolveTarget: resolvePublicTarget }, hostedScanConfig());
 const server = createHttpAdmissionServer(
   {
-    proxyUrl: proxy.url,
-    scan: scanResponsive,
+    scan: hostedScan,
     acceptTarget: assertPublicUrl,
     allowResource: async (url) =>
       resolvePublicTarget(url).then(
@@ -30,7 +29,7 @@ let closing = false;
 const cleanup = () => {
   if (closing) return;
   closing = true;
-  server.close(() => void proxy.close().finally(() => process.exit(0)));
+  server.close(() => process.exit(0));
 };
 process.on("SIGTERM", cleanup);
 process.on("SIGINT", cleanup);

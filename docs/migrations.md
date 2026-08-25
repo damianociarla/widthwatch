@@ -1,5 +1,13 @@
 # Migration notes
 
+## v0.4.5
+
+This patch hard-bounds hosted transfer volume without changing report schema, sampling protocol or capture protocol. Existing baselines compatible with v0.4.0–v0.4.4 remain compatible with v0.4.5.
+
+Every hosted job now owns a bounded egress session with a fresh pinned proxy and byte allowance. Plain HTTP rejects an oversized declared body before transfer and meters chunked bodies up to 10 MiB per response. Opaque CONNECT traffic is counted in both directions up to 25 MiB per tunnel, including the initial head. Both protocols share a 75 MiB job total. Exceeding any limit closes all session sockets, aborts Chromium through the new additive `ScanOptions.signal`, and records a sanitized failed job; the next queued scan starts with a new allowance. Limits can be overridden with `MAX_BYTES_PER_RESPONSE`, `MAX_BYTES_PER_TUNNEL` and `MAX_TRANSFERRED_BYTES` byte values.
+
+The previously accepted CLI flag `--full-page` now appears in help. Its combination with `--layout-only` is explicitly supported: capture the full document while retaining layout mode's disabled scroll sweep.
+
 ## v0.4.4
 
 This patch strengthens hosted HTTPS egress verification without changing report schema, sampling protocol or capture protocol. Existing baselines compatible with v0.4.0–v0.4.3 remain compatible with v0.4.4.

@@ -1,27 +1,39 @@
 import { Agent, createServer, request as httpRequest, type IncomingHttpHeaders, type IncomingMessage, type ServerResponse } from "node:http";
 import { connect, type Socket } from "node:net";
 import type { Duplex } from "node:stream";
+import type { EgressTransferBudget } from "./egress-budget.js";
 import { resolvePublicTarget, UnsafeUrlError } from "./network-policy.js";
 
 export type EgressTargetResolver = (value: string) => ReturnType<typeof resolvePublicTarget>;
 export type EgressConnector = (addresses: string[], port: number) => Promise<Socket>;
 
-export async function startPinnedEgressProxy(
-  resolveTarget: EgressTargetResolver = resolvePublicTarget,
-  connectTarget: EgressConnector = connectPinned,
-): Promise<{ url: string; close(): Promise<void> }> {
+export interface PinnedEgressProxyOptions {
+  budget: EgressTransferBudget;
+  resolveTarget?: EgressTargetResolver;
+  connectTarget?: EgressConnector;
+}
+
+export async function startPinnedEgressProxy(options: PinnedEgressProxyOptions): Promise<{ url: string; close(): Promise<void> }> {
+  const { budget, resolveTarget = resolvePublicTarget, connectTarget = connectPinned } = options;
   const sockets = new Set<Socket>();
-  const server = createServer((request, response) => {
-    void proxyHttp(request, response, resolveTarget, connectTarget);
-  });
-  server.on("connect", (request, socket, head) => {
-    void proxyTunnel(request.url ?? "", socket, head, resolveTarget, connectTarget);
-  });
-  server.on("upgrade", (_request, socket) => socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n"));
-  server.on("connection", (socket) => {
+  const trackSocket = (socket: Socket): Socket => {
     sockets.add(socket);
     socket.once("close", () => sockets.delete(socket));
+    if (budget.signal.aborted) socket.destroy();
+    return socket;
+  };
+  const abortConnections = () => {
+    for (const socket of sockets) socket.destroy();
+  };
+  budget.signal.addEventListener("abort", abortConnections, { once: true });
+  const server = createServer((request, response) => {
+    void proxyHttp(request, response, resolveTarget, connectTarget, budget, trackSocket);
   });
+  server.on("connect", (request, socket, head) => {
+    void proxyTunnel(request.url ?? "", socket, head, resolveTarget, connectTarget, budget, trackSocket);
+  });
+  server.on("upgrade", (_request, socket) => socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n"));
+  server.on("connection", trackSocket);
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
     server.listen(0, "127.0.0.1", resolve);
@@ -32,6 +44,7 @@ export async function startPinnedEgressProxy(
     url: `http://127.0.0.1:${address.port}`,
     close: () =>
       new Promise((resolve, reject) => {
+        budget.signal.removeEventListener("abort", abortConnections);
         for (const socket of sockets) socket.destroy();
         server.close((error) => (error ? reject(error) : resolve()));
       }),
@@ -43,12 +56,15 @@ async function proxyHttp(
   response: ServerResponse,
   resolveTarget: EgressTargetResolver,
   connectTarget: EgressConnector,
+  budget: EgressTransferBudget,
+  trackSocket: (socket: Socket) => Socket,
 ): Promise<void> {
   try {
+    budget.assertAvailable();
     if (!request.url) throw new UnsafeUrlError();
     const target = await resolveTarget(request.url);
     if (target.url.protocol !== "http:") throw new UnsafeUrlError();
-    const socket = await connectTarget(target.addresses, Number(target.url.port || 80));
+    const socket = trackSocket(await connectTarget(target.addresses, Number(target.url.port || 80)));
     const agent = new Agent({ keepAlive: false });
     agent.createConnection = () => socket;
     const headers: IncomingHttpHeaders = { ...request.headers, host: target.url.host };
@@ -56,6 +72,8 @@ async function proxyHttp(
     const upstream = httpRequest({ method: request.method, path: `${target.url.pathname}${target.url.search}`, headers, agent });
     upstream.setTimeout(10_000, () => upstream.destroy());
     upstream.on("response", (source) => {
+      const meter = budget.openResponse(parseContentLength(source.headers["content-length"]));
+      source.on("data", (chunk) => meter.add(chunkBytes(chunk)));
       response.writeHead(source.statusCode ?? 502, source.headers);
       source.pipe(response);
     });
@@ -63,9 +81,11 @@ async function proxyHttp(
       if (!response.headersSent) response.writeHead(502);
       response.end();
     });
+    request.on("data", (chunk) => budget.addTransferredBytes(chunkBytes(chunk)));
     request.pipe(upstream);
   } catch {
-    response.writeHead(403, { connection: "close" }).end("Blocked by WidthWatch egress policy.");
+    if (!response.destroyed && !response.headersSent)
+      response.writeHead(budget.signal.aborted ? 502 : 403, { connection: "close" }).end("Blocked by WidthWatch egress policy.");
   }
 }
 
@@ -75,22 +95,41 @@ async function proxyTunnel(
   head: Buffer,
   resolveTarget: EgressTargetResolver,
   connectTarget: EgressConnector,
+  budget: EgressTransferBudget,
+  trackSocket: (socket: Socket) => Socket,
 ): Promise<void> {
   try {
+    budget.assertAvailable();
     const url = new URL(`https://${authority}`);
     if (Number(url.port || 443) !== 443 || url.username || url.password || url.pathname !== "/") throw new UnsafeUrlError();
     const target = await resolveTarget(url.toString());
-    const upstream = await connectTarget(target.addresses, 443);
+    const upstream = trackSocket(await connectTarget(target.addresses, 443));
+    const meter = budget.openTunnel();
+    if (head.length && !meter.add(head.length)) throw budget.error;
     client.write("HTTP/1.1 200 Connection Established\r\n\r\n");
     if (head.length) upstream.write(head);
+    client.on("data", (chunk) => meter.add(chunkBytes(chunk)));
+    upstream.on("data", (chunk) => meter.add(chunkBytes(chunk)));
     upstream.pipe(client);
     client.pipe(upstream);
     upstream.setTimeout(12_000, () => upstream.destroy());
     client.once("close", () => upstream.destroy());
     upstream.once("close", () => client.destroy());
   } catch {
-    client.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+    if (!client.destroyed) client.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
   }
+}
+
+function parseContentLength(value: string | undefined): number | undefined {
+  if (value === undefined || !/^\d+$/.test(value)) return undefined;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : undefined;
+}
+
+function chunkBytes(chunk: unknown): number {
+  if (Buffer.isBuffer(chunk)) return chunk.length;
+  if (typeof chunk === "string") return Buffer.byteLength(chunk);
+  return Buffer.byteLength(String(chunk));
 }
 
 export async function connectPinned(addresses: string[], port: number): Promise<Socket> {

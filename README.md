@@ -81,7 +81,7 @@ npx widthwatch "$CANDIDATE_URL" \
 
 Baseline and candidate must run in the same pinned browser container. Browser rendering can vary by operating system, fonts, browser version and other host details; a visual threshold cannot compensate for unrelated environments.
 
-The CLI uses correctness-first visual capture and reloads each width. Adaptive visual scans probe up to 24 widths geometrically, then use `--max-captures` (default 8) to bound the expensive full-page evidence schedule. Every discovery finding remains in `report.probes` and the canonical `report.issues`, even when its width has no screenshot. Baseline comparisons reproduce both the probe schedule and the evidence schedule. For a fast diagnostic probe that only inspects the viewport, use `--layout-only`; add `--reload-per-width` when a layout-only application calculates responsive state only during startup.
+The CLI uses correctness-first visual capture and reloads each width. Adaptive visual scans probe up to 24 widths geometrically, then use `--max-captures` (default 8) to bound the expensive full-page evidence schedule. Every discovery finding remains in `report.probes` and the canonical `report.issues`, even when its width has no screenshot. Baseline comparisons reproduce both the probe schedule and the evidence schedule. For a fast diagnostic probe that only inspects the viewport, use `--layout-only`; add `--reload-per-width` when a layout-only application calculates responsive state only during startup. `--full-page` is already the visual default; combined with `--layout-only`, it captures the whole document without enabling the visual scroll sweep.
 
 Severity changes are explicit comparison outcomes. A finding that moves from warning to error enters both `regressions` and `escalated`; a lower severity is recorded in `deescalated` without being misreported as resolved. See the [migration notes](docs/migrations.md) before reusing baselines created before v0.3.1.
 
@@ -114,7 +114,7 @@ npm run coverage
 npm run dev
 ```
 
-Coverage gates run per workspace. The hosted API additionally enforces focused thresholds for HTTP admission, public-target policy and pinned egress; the web client is measured in Chromium against its original TypeScript source.
+Coverage gates run per workspace. The hosted API additionally enforces focused thresholds for HTTP admission, public-target policy, pinned egress, byte allowance and hosted execution; the web client is measured in Chromium against its original TypeScript source.
 
 Run the API separately:
 
@@ -125,7 +125,7 @@ npm start --workspace @widthwatch/api
 
 ## Public demo limits
 
-The hosted surface is intentionally not the local package in the cloud. It accepts one credential-free public page, uses 5 adaptive layout captures with compact JPEG evidence, blocks media, caps navigation at 15 seconds and 200 requests, admits at most three queued jobs, and runs one browser. Job status remains in memory for 30 minutes; when `AWS_INSTANCE_ROLE_ARN` is configured, completed HTML reports are stored in a private encrypted S3 bucket and expire automatically after 7 days. The admission request streams lightweight heartbeats while the browser works so App Runner does not throttle detached CPU, while status polling returns lightweight metadata rather than embedded screenshots. Separate client, target, global, CloudFront/WAF and compute limits prevent arbitrary scale-out. The local visual package uses 24 discovery probes, up to 8 lossless evidence captures by default, and exact schedules for CI comparison.
+The hosted surface is intentionally not the local package in the cloud. It accepts one credential-free public page, uses 5 adaptive layout captures with compact JPEG evidence, blocks media, caps navigation at 15 seconds and 200 requests, admits at most three queued jobs, and runs one browser. Every job gets a fresh bounded egress session: 10 MiB per plain-HTTP response, 25 MiB per opaque HTTPS tunnel and 75 MiB of transferred payload in total. Exhausting any allowance closes proxy sockets, aborts Chromium and fails the job closed. Job status remains in memory for 30 minutes; when `AWS_INSTANCE_ROLE_ARN` is configured, completed HTML reports are stored in a private encrypted S3 bucket and expire automatically after 7 days. The admission request streams lightweight heartbeats while the browser works so App Runner does not throttle detached CPU, while status polling returns lightweight metadata rather than embedded screenshots. Separate client, target, global, CloudFront/WAF, transfer and compute limits prevent arbitrary scale-out. The local visual package uses 24 discovery probes, up to 8 lossless evidence captures by default, and exact schedules for CI comparison.
 
 See [architecture](docs/architecture.md), [OpenAPI](docs/openapi.yml), and [security policy](SECURITY.md).
 
