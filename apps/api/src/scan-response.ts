@@ -1,5 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { getReportIssues, type WidthWatchReport } from "widthwatch";
+import type { JobFailureCode } from "./job-outcome.js";
 
 export type HostedScanStatus = "queued" | "running" | "complete" | "failed";
 
@@ -8,6 +9,7 @@ export interface HostedScanJob {
   status: HostedScanStatus;
   report?: WidthWatchReport;
   error?: string;
+  failureCode?: JobFailureCode;
 }
 
 export async function holdConnectionUntilSettled(job: HostedScanJob, timeoutMs: number, heartbeat?: () => void, heartbeatIntervalMs = 5_000): Promise<void> {
@@ -55,5 +57,6 @@ export function scanStatusPayload(job: HostedScanJob): Record<string, unknown> {
         }
       : {}),
     ...(job.error ? { error: job.error } : {}),
+    ...(job.failureCode ? { failureCode: job.failureCode } : {}),
   };
 }

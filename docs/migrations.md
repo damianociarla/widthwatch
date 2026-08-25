@@ -1,5 +1,15 @@
 # Migration notes
 
+## v0.4.6
+
+This patch adds hosted operability without changing report schema, sampling protocol or capture protocol. Existing baselines compatible with v0.4.0–v0.4.5 remain compatible with v0.4.6.
+
+Failed hosted jobs retain the generic public message and now add one non-sensitive `failureCode`: `transfer_limit`, `request_limit`, `timeout`, `browser_failure`, `network_failure` or `internal_failure`. A production adapter writes a redacted JSON job outcome containing only job ID, phase, duration and optional numeric transfer metadata. CloudWatch metric filters and alarms consume this stable event; raw errors, target addresses and page data are never emitted.
+
+Hosted egress environment values are validated when the runner is constructed. Invalid, fractional, zero or inconsistent byte limits now prevent startup instead of allowing a healthy process that fails every scan.
+
+AWS deployments now require the budget/operational alert email and provision regional SNS routing plus App Runner, failed-scan, transfer-limit, CloudFront and WAF alarms. The protected `WIDTHWATCH_PUBLIC_SCANNER_ENABLED` GitHub variable controls a highest-priority WAF emergency rule. Follow the [incident runbook](runbooks/public-scanner.md) to disable or restore new scans without taking health, status or existing reports offline.
+
 ## v0.4.5
 
 This patch hard-bounds hosted transfer volume without changing report schema, sampling protocol or capture protocol. Existing baselines compatible with v0.4.0–v0.4.4 remain compatible with v0.4.5.

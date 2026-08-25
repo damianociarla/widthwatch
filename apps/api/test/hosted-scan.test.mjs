@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { request } from "node:http";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { scanResponsive } from "widthwatch";
 import { EgressBudgetExceededError } from "../dist/egress-budget.js";
 import { createHostedScanRunner, hostedScanConfig } from "../dist/hosted-scan.js";
@@ -61,6 +63,34 @@ test("hosted scan config exposes explicit byte defaults and environment override
     maxBytesPerTunnel: 20,
     maxTransferredBytes: 30,
   });
+});
+
+test("bounded egress configuration fails before a runner can accept jobs", () => {
+  const adapters = {
+    resolveTarget: async (value) => ({ url: new URL(value), addresses: ["127.0.0.1"] }),
+    scan: async (url) => report(url),
+  };
+  for (const config of [
+    { maxBytesPerResponse: Number.NaN, maxBytesPerTunnel: 20, maxTransferredBytes: 30 },
+    { maxBytesPerResponse: 0, maxBytesPerTunnel: 20, maxTransferredBytes: 30 },
+    { maxBytesPerResponse: 1.5, maxBytesPerTunnel: 20, maxTransferredBytes: 30 },
+    { maxBytesPerResponse: 31, maxBytesPerTunnel: 20, maxTransferredBytes: 30 },
+    { maxBytesPerResponse: 10, maxBytesPerTunnel: 31, maxTransferredBytes: 30 },
+  ]) {
+    assert.throws(() => createHostedScanRunner(adapters, config));
+  }
+  assert.throws(() => createHostedScanRunner(adapters, hostedScanConfig({ MAX_BYTES_PER_RESPONSE: "invalid" })), /positive whole number/);
+});
+
+test("invalid hosted egress environment prevents the production server from becoming healthy", () => {
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL("../dist/server.js", import.meta.url))], {
+    encoding: "utf8",
+    timeout: 5_000,
+    env: { ...process.env, MAX_BYTES_PER_RESPONSE: "invalid", PORT: "0" },
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /maxBytesPerResponse must be a positive whole number/);
+  assert.doesNotMatch(result.stdout, /WidthWatch API listening/);
 });
 
 test("bounded egress sessions abort an oversized job and give the next job a fresh allowance", async (t) => {

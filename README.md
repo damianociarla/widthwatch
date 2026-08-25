@@ -127,18 +127,19 @@ npm start --workspace @widthwatch/api
 
 The hosted surface is intentionally not the local package in the cloud. It accepts one credential-free public page, uses 5 adaptive layout captures with compact JPEG evidence, blocks media, caps navigation at 15 seconds and 200 requests, admits at most three queued jobs, and runs one browser. Every job gets a fresh bounded egress session: 10 MiB per plain-HTTP response, 25 MiB per opaque HTTPS tunnel and 75 MiB of transferred payload in total. Exhausting any allowance closes proxy sockets, aborts Chromium and fails the job closed. Job status remains in memory for 30 minutes; when `AWS_INSTANCE_ROLE_ARN` is configured, completed HTML reports are stored in a private encrypted S3 bucket and expire automatically after 7 days. The admission request streams lightweight heartbeats while the browser works so App Runner does not throttle detached CPU, while status polling returns lightweight metadata rather than embedded screenshots. Separate client, target, global, CloudFront/WAF, transfer and compute limits prevent arbitrary scale-out. The local visual package uses 24 discovery probes, up to 8 lossless evidence captures by default, and exact schedules for CI comparison.
 
-See [architecture](docs/architecture.md), [OpenAPI](docs/openapi.yml), and [security policy](SECURITY.md).
+See [architecture](docs/architecture.md), [OpenAPI](docs/openapi.yml), [security policy](SECURITY.md), and the [public scanner incident runbook](docs/runbooks/public-scanner.md).
 
 ## Deployment bootstrap
 
-1. Deploy `infra/aws/github-deploy-role.yml` once, reusing the account-level GitHub OIDC provider.
+1. Deploy `infra/aws/github-deploy-role.yml`, reusing the account-level GitHub OIDC provider; redeploy this bootstrap stack when its least-privilege policy changes.
 2. Configure protected GitHub environment `production`.
 3. Add repository variables `AWS_ACCOUNT_ID`, `AWS_DEPLOY_ROLE_ARN`, `AWS_CLOUDFORMATION_ROLE_ARN`, `AWS_ECR_ACCESS_ROLE_ARN`, `AWS_INSTANCE_ROLE_ARN`, and `VITE_API_URL`.
-4. Add `WIDTHWATCH_ORIGIN_VERIFY_TOKEN` as an environment secret.
-5. Configure npm trusted publishing for repository `damianociarla/widthwatch`, workflow `release.yml`, environment `production`.
-6. Enable GitHub Pages with GitHub Actions as its source.
+4. Add `WIDTHWATCH_ORIGIN_VERIFY_TOKEN` and `WIDTHWATCH_BUDGET_ALERT_EMAIL` as environment secrets. Deployment fails closed when alert routing is absent.
+5. Add the environment-scoped Actions variable `WIDTHWATCH_PUBLIC_SCANNER_ENABLED=true`; the incident runbook changes it explicitly during an emergency.
+6. Configure npm trusted publishing for repository `damianociarla/widthwatch`, workflow `release.yml`, environment `production`.
+7. Enable GitHub Pages with GitHub Actions as its source.
 
-A `v*` tag validates, deploys the API, publishes npm, publishes the website, and creates the GitHub Release. AWS credentials are short-lived through GitHub OIDC; npm trusted publishing also uses OIDC and emits provenance.
+A `v*` tag validates, deploys the API, publishes npm and creates the GitHub Release. Pushes to `main` publish the website. AWS credentials are short-lived through GitHub OIDC; npm trusted publishing also uses OIDC and emits provenance.
 
 The `Deploy API` workflow can bootstrap or redeploy only the hosted scanner without publishing an npm release.
 

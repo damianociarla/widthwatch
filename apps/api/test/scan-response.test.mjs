@@ -80,3 +80,12 @@ test("hosted status excludes screenshot payloads", () => {
   assert.deepEqual(payload.report.probes, [{ width: 640, severities: ["error"] }]);
   assert.equal(payload.reportUrl, "/v1/reports/scan-1");
 });
+
+test("failed status exposes only the stable failure code and public message", () => {
+  assert.deepEqual(scanStatusPayload({ id: "scan-2", status: "failed", error: "The bounded scan could not complete.", failureCode: "timeout" }), {
+    id: "scan-2",
+    status: "failed",
+    error: "The bounded scan could not complete.",
+    failureCode: "timeout",
+  });
+});

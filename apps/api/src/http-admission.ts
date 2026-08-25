@@ -1,13 +1,23 @@
 import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { generateHtmlReport, type ScanOptions, type WidthWatchReport } from "widthwatch";
+import { createJobFailureEvent, type JobFailureCode, type JobFailureObserver, type JobFailurePhase } from "./job-outcome.js";
 import { UnsafeUrlError } from "./network-policy.js";
 import { holdConnectionUntilSettled, scanStatusPayload, type HostedScanStatus } from "./scan-response.js";
 import { persistReportBestEffort, type ReportStore } from "./report-store.js";
 import { consumeRateLimits, SlidingWindowLimiter } from "./security.js";
 import { API_VERSION } from "./version.js";
 
-type Job = { id: string; url: string; createdAt: number; status: HostedScanStatus; report?: WidthWatchReport; reportHtml?: string; error?: string };
+type Job = {
+  id: string;
+  url: string;
+  createdAt: number;
+  status: HostedScanStatus;
+  report?: WidthWatchReport;
+  reportHtml?: string;
+  error?: string;
+  failureCode?: JobFailureCode;
+};
 
 export interface HttpAdmissionAdapters {
   scan(url: string, options: ScanOptions): Promise<WidthWatchReport>;
@@ -16,6 +26,7 @@ export interface HttpAdmissionAdapters {
   reports: Pick<ReportStore, "get" | "put">;
   createId(): string;
   now(): number;
+  onJobFailed: JobFailureObserver;
 }
 
 export interface HttpAdmissionConfig {
@@ -152,6 +163,8 @@ export function createHttpAdmissionServer(adapters: HttpAdmissionAdapters, confi
     while (queue.length) {
       const job = queue.shift()!;
       job.status = "running";
+      const startedAt = adapters.now();
+      let phase: JobFailurePhase = "scan";
       try {
         job.report = await adapters.scan(job.url, {
           mode: "layout",
@@ -172,12 +185,20 @@ export function createHttpAdmissionServer(adapters: HttpAdmissionAdapters, confi
           blockResourceTypes: ["media", "websocket"],
           allowedUrl: adapters.allowResource,
         });
+        phase = "report";
         job.reportHtml = generateHtmlReport(job.report);
         job.status = "complete";
         void persistReportBestEffort(adapters.reports, job.id, job.reportHtml);
-      } catch {
+      } catch (error) {
+        const outcome = createJobFailureEvent({ jobId: job.id, phase, durationMs: adapters.now() - startedAt, error });
         job.status = "failed";
         job.error = "The bounded scan could not complete.";
+        job.failureCode = outcome.failureCode;
+        try {
+          adapters.onJobFailed(outcome);
+        } catch {
+          // Telemetry must not change public job state or stop the queue.
+        }
       }
     }
     running = false;

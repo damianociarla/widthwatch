@@ -6,10 +6,9 @@ Parameters:
   InstanceRoleArn: { Type: String, Default: "" }
   OriginVerifyToken: { Type: String, NoEcho: true }
   AllowedOrigins: { Type: String, Default: "https://damianociarla.github.io" }
-  BudgetAlertEmail: { Type: String, Default: "" }
+  BudgetAlertEmail: { Type: String, AllowedPattern: "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$" }
   MonthlyBudgetUsd: { Type: Number, Default: 20 }
 Conditions:
-  HasBudgetAlertEmail: !Not [!Equals [!Ref BudgetAlertEmail, ""]]
   HasReportPersistence: !Not [!Equals [!Ref InstanceRoleArn, ""]]
 Resources:
   ReportBucket:
@@ -68,9 +67,121 @@ Resources:
                 - HasReportPersistence
                 - { Name: REPORT_BUCKET, Value: !Ref ReportBucket }
                 - !Ref "AWS::NoValue"
+  OperationalAlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: widthwatch-operational-alerts
+  OperationalAlertSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref OperationalAlertTopic
+      Protocol: email
+      Endpoint: !Ref BudgetAlertEmail
+  JobFailureMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Sub "/aws/apprunner/widthwatch-api/${Service.ServiceId}/application"
+      FilterName: widthwatch-hosted-scan-failures
+      FilterPattern: '{ $.event = "hosted_scan_failed" }'
+      MetricTransformations:
+        - MetricNamespace: WidthWatch/Hosted
+          MetricName: FailedScans
+          MetricValue: "1"
+          DefaultValue: 0
+  TransferFailureMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Sub "/aws/apprunner/widthwatch-api/${Service.ServiceId}/application"
+      FilterName: widthwatch-transfer-limit-failures
+      FilterPattern: '{ $.event = "hosted_scan_failed" && $.failureCode = "transfer_limit" }'
+      MetricTransformations:
+        - MetricNamespace: WidthWatch/Hosted
+          MetricName: TransferLimitFailures
+          MetricValue: "1"
+          DefaultValue: 0
+  FailedScansAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Three hosted scans failed within five minutes
+      Namespace: WidthWatch/Hosted
+      MetricName: FailedScans
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 3
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref OperationalAlertTopic]
+      OKActions: [!Ref OperationalAlertTopic]
+  TransferLimitAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: A hosted scan exhausted a transfer allowance
+      Namespace: WidthWatch/Hosted
+      MetricName: TransferLimitFailures
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref OperationalAlertTopic]
+      OKActions: [!Ref OperationalAlertTopic]
+  AppRunner5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: App Runner returned five or more 5xx responses in five minutes
+      Namespace: AWS/AppRunner
+      MetricName: 5xxStatusResponses
+      Dimensions:
+        - { Name: ServiceName, Value: widthwatch-api }
+        - { Name: ServiceID, Value: !GetAtt Service.ServiceId }
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref OperationalAlertTopic]
+      OKActions: [!Ref OperationalAlertTopic]
+  AppRunnerCpuAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: App Runner CPU stayed above 85 percent for ten minutes
+      Namespace: AWS/AppRunner
+      MetricName: CPUUtilization
+      Dimensions:
+        - { Name: ServiceName, Value: widthwatch-api }
+        - { Name: ServiceID, Value: !GetAtt Service.ServiceId }
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      DatapointsToAlarm: 2
+      Threshold: 85
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref OperationalAlertTopic]
+      OKActions: [!Ref OperationalAlertTopic]
+  AppRunnerMemoryAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: App Runner memory stayed above 85 percent for ten minutes
+      Namespace: AWS/AppRunner
+      MetricName: MemoryUtilization
+      Dimensions:
+        - { Name: ServiceName, Value: widthwatch-api }
+        - { Name: ServiceID, Value: !GetAtt Service.ServiceId }
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      DatapointsToAlarm: 2
+      Threshold: 85
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref OperationalAlertTopic]
+      OKActions: [!Ref OperationalAlertTopic]
   MonthlyCostBudget:
     Type: AWS::Budgets::Budget
-    Condition: HasBudgetAlertEmail
     Properties:
       Budget:
         BudgetName: widthwatch-monthly-cost
@@ -85,6 +196,10 @@ Resources:
 Outputs:
   ServiceUrl: { Value: !GetAtt Service.ServiceUrl }
   ServiceArn: { Value: !GetAtt Service.ServiceArn }
+  OperationalAlertTopicArn: { Value: !Ref OperationalAlertTopic }
+  OperationalAlertSubscriptionArn: { Value: !Ref OperationalAlertSubscription }
+  OperationalAlarmsConfigured: { Value: "true" }
+  BudgetAlertsConfigured: { Value: "true" }
   ReportBucketName:
     Condition: HasReportPersistence
     Value: !Ref ReportBucket

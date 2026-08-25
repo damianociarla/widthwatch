@@ -16,8 +16,9 @@ export function createHostedScanRunner(
   adapters: HostedScanAdapters,
   config: HostedScanConfig,
 ): (url: string, options: ScanOptions) => Promise<WidthWatchReport> {
+  const limits = new EgressTransferBudget(config).limits;
   return async (url, options) => {
-    const budget = new EgressTransferBudget(config);
+    const budget = new EgressTransferBudget(limits);
     const proxy = await startPinnedEgressProxy({
       budget,
       resolveTarget: adapters.resolveTarget,

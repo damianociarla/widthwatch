@@ -31,3 +31,7 @@ The request lifecycle that accepts a hosted public scan. HTTP admission owns JSO
 ## Bounded egress session
 
 The job-scoped execution lifecycle for one hosted scan. A bounded egress session owns its pinned proxy, byte allowance, browser cancellation and transport cleanup. Plain HTTP responses have individual body limits; opaque HTTPS connections have tunnel limits; both protocols share one hard transferred-byte limit for the job.
+
+## Job outcome
+
+The sanitized operational result of a hosted scan. A failed job outcome contains a stable failure code, phase and duration, plus bounded transfer metadata only when applicable. It never contains a target URL, hostname, query string, page content, raw error message or stack trace. HTTP admission exposes the safe code and sends the same outcome to an operational adapter.

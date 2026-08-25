@@ -18,6 +18,8 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run lint
+      - if: matrix.node == 24
+        run: pipx run cfn-lint infra/aws/*.yml
       - run: npm run format:check
       - run: npm run typecheck
       - run: npm test

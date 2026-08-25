@@ -11,7 +11,7 @@ function report(url = "https://example.com/") {
     scannedAt: new Date(0).toISOString(),
     durationMs: 1,
     range: { min: 320, max: 320, height: 800 },
-    environment: { browser: "test", platform: "test", packageVersion: "0.4.5" },
+    environment: { browser: "test", platform: "test", packageVersion: "0.4.6" },
     frames: [
       {
         width: 320,
@@ -30,6 +30,7 @@ function report(url = "https://example.com/") {
 
 async function fixture(t, options = {}) {
   const scans = [];
+  const failures = [];
   const stored = new Map();
   let ids = 0;
   const adapters = {
@@ -48,6 +49,7 @@ async function fixture(t, options = {}) {
     },
     createId: () => `abc-${++ids}`,
     now: () => Date.now(),
+    onJobFailed: (event) => failures.push(event),
     ...options.adapters,
   };
   const config = {
@@ -71,7 +73,7 @@ async function fixture(t, options = {}) {
   );
   const address = server.address();
   assert.ok(address && typeof address !== "string");
-  return { origin: `http://127.0.0.1:${address.port}`, scans, stored };
+  return { origin: `http://127.0.0.1:${address.port}`, scans, stored, failures };
 }
 
 async function post(origin, body, headers = {}) {
@@ -196,4 +198,60 @@ test("HTTP admission enforces retained-job capacity before accepting work", asyn
   assert.equal(full.status, 503);
   assert.deepEqual(await full.json(), { error: "capacity_reached" });
   assert.equal(scans.length, 1);
+});
+
+test("HTTP admission exposes safe failure codes and sends one redacted job outcome", async (t) => {
+  const raw = new Error("total request budget exceeded for https://secret.example/?token=private");
+  const { origin, failures } = await fixture(t, {
+    adapters: {
+      scan: async () => {
+        throw raw;
+      },
+    },
+  });
+  const response = await post(origin, JSON.stringify({ url: "public.example" }));
+  assert.equal(response.status, 202);
+  const body = await response.json();
+  assert.deepEqual(
+    { status: body.status, error: body.error, failureCode: body.failureCode },
+    { status: "failed", error: "The bounded scan could not complete.", failureCode: "request_limit" },
+  );
+  assert.equal(failures.length, 1);
+  assert.equal(failures[0].jobId, "abc-1");
+  assert.equal(failures[0].phase, "scan");
+  assert.equal(JSON.stringify(failures).includes("secret.example"), false);
+  assert.equal(JSON.stringify(failures).includes("private"), false);
+});
+
+test("telemetry failures never change job state or stop the queue", async (t) => {
+  let calls = 0;
+  const { origin } = await fixture(t, {
+    config: { clientLimit: 10, targetLimit: 10, globalLimit: 10 },
+    adapters: {
+      scan: async (url) => {
+        calls += 1;
+        if (calls === 1) throw new Error("browser crashed");
+        return report(url);
+      },
+      onJobFailed: () => {
+        throw new Error("telemetry unavailable");
+      },
+    },
+  });
+  const first = await (await post(origin, JSON.stringify({ url: "first.example" }))).json();
+  const second = await (await post(origin, JSON.stringify({ url: "second.example" }))).json();
+  assert.equal(first.failureCode, "browser_failure");
+  assert.equal(second.status, "complete");
+  assert.equal(calls, 2);
+});
+
+test("report generation failures are classified in the report phase", async (t) => {
+  const { origin, failures } = await fixture(t, {
+    adapters: {
+      scan: async () => null,
+    },
+  });
+  const body = await (await post(origin, JSON.stringify({ url: "public.example" }))).json();
+  assert.equal(body.failureCode, "internal_failure");
+  assert.equal(failures[0].phase, "report");
 });

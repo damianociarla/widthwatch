@@ -3,6 +3,10 @@ Description: WidthWatch protected public edge (deploy in us-east-1)
 Parameters:
   OriginDomain: { Type: String }
   OriginVerifyToken: { Type: String, NoEcho: true }
+  AlertEmail: { Type: String, AllowedPattern: "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$" }
+  PublicScannerEnabled: { Type: String, Default: "true", AllowedValues: ["true", "false"] }
+Conditions:
+  ScannerEnabled: !Equals [!Ref PublicScannerEnabled, "true"]
 Resources:
   WebAcl:
     Type: AWS::WAFv2::WebACL
@@ -12,13 +16,30 @@ Resources:
       DefaultAction: { Allow: {} }
       VisibilityConfig: { CloudWatchMetricsEnabled: true, MetricName: widthwatch-edge, SampledRequestsEnabled: true }
       Rules:
-        - Name: AWSCommonRules
+        - Name: EmergencyScannerSwitch
           Priority: 0
+          Action: !If [ScannerEnabled, { Count: {} }, { Block: {} }]
+          Statement:
+            AndStatement:
+              Statements:
+                - ByteMatchStatement:
+                    FieldToMatch: { UriPath: {} }
+                    PositionalConstraint: EXACTLY
+                    SearchString: /v1/scans
+                    TextTransformations: [{ Priority: 0, Type: NONE }]
+                - ByteMatchStatement:
+                    FieldToMatch: { Method: {} }
+                    PositionalConstraint: EXACTLY
+                    SearchString: POST
+                    TextTransformations: [{ Priority: 0, Type: NONE }]
+          VisibilityConfig: { CloudWatchMetricsEnabled: true, MetricName: scanner-switch, SampledRequestsEnabled: true }
+        - Name: AWSCommonRules
+          Priority: 1
           OverrideAction: { None: {} }
           Statement: { ManagedRuleGroupStatement: { VendorName: AWS, Name: AWSManagedRulesCommonRuleSet } }
           VisibilityConfig: { CloudWatchMetricsEnabled: true, MetricName: common, SampledRequestsEnabled: true }
         - Name: ScanRateLimit
-          Priority: 1
+          Priority: 2
           Action: { Block: {} }
           Statement:
             RateBasedStatement:
@@ -69,6 +90,90 @@ Resources:
         HeadersConfig:
           HeaderBehavior: whitelist
           Headers: [Access-Control-Request-Headers, Access-Control-Request-Method, CloudFront-Viewer-Address, Content-Type, Origin]
+  EdgeAlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: widthwatch-edge-operational-alerts
+  EdgeAlertSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref EdgeAlertTopic
+      Protocol: email
+      Endpoint: !Ref AlertEmail
+  CloudFront5xxAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: CloudFront 5xx error rate reached five percent
+      Namespace: AWS/CloudFront
+      MetricName: 5xxErrorRate
+      Dimensions:
+        - { Name: DistributionId, Value: !Ref Distribution }
+        - { Name: Region, Value: Global }
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref EdgeAlertTopic]
+      OKActions: [!Ref EdgeAlertTopic]
+  CloudFrontRequestSurgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: CloudFront received at least one thousand requests in five minutes
+      Namespace: AWS/CloudFront
+      MetricName: Requests
+      Dimensions:
+        - { Name: DistributionId, Value: !Ref Distribution }
+        - { Name: Region, Value: Global }
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1000
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref EdgeAlertTopic]
+      OKActions: [!Ref EdgeAlertTopic]
+  WafBlockedRequestsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: WAF blocked at least fifty requests in five minutes
+      Namespace: AWS/WAFV2
+      MetricName: BlockedRequests
+      Dimensions:
+        - { Name: WebACL, Value: widthwatch-edge }
+        - { Name: Region, Value: Global }
+        - { Name: Rule, Value: ALL }
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 50
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref EdgeAlertTopic]
+      OKActions: [!Ref EdgeAlertTopic]
+  ScanRateBlockedAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: The public scan rate rule blocked requests
+      Namespace: AWS/WAFV2
+      MetricName: BlockedRequests
+      Dimensions:
+        - { Name: WebACL, Value: widthwatch-edge }
+        - { Name: Region, Value: Global }
+        - { Name: Rule, Value: scan-rate }
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref EdgeAlertTopic]
+      OKActions: [!Ref EdgeAlertTopic]
 Outputs:
   ApiUrl: { Value: !Sub "https://${Distribution.DomainName}" }
   DistributionId: { Value: !Ref Distribution }
+  PublicScannerStatus: { Value: !If [ScannerEnabled, ENABLED, DISABLED] }
+  EdgeAlertTopicArn: { Value: !Ref EdgeAlertTopic }
+  EdgeAlertSubscriptionArn: { Value: !Ref EdgeAlertSubscription }
+  EdgeAlarmsConfigured: { Value: "true" }

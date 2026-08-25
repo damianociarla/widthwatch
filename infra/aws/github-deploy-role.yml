@@ -108,7 +108,7 @@ Resources:
                   - apprunner:CreateAutoScalingConfiguration
                   - apprunner:DeleteAutoScalingConfiguration
                   - apprunner:DescribeAutoScalingConfiguration
-                  - apprunner:ListAssociatedServicesForAutoScalingConfiguration
+                  - apprunner:ListServicesForAutoScalingConfiguration
                   - apprunner:ListTagsForResource
                   - apprunner:TagResource
                   - apprunner:UntagResource
@@ -149,17 +149,35 @@ Resources:
                 Resource: !Sub "arn:${AWS::Partition}:budgets::${AWS::AccountId}:budget/widthwatch-monthly-cost"
               - Effect: Allow
                 Action:
+                  - cloudwatch:DeleteAlarms
+                  - cloudwatch:DescribeAlarms
+                  - cloudwatch:PutMetricAlarm
+                  - logs:DeleteMetricFilter
+                  - logs:DescribeMetricFilters
+                  - logs:PutMetricFilter
+                  - sns:CreateTopic
+                  - sns:DeleteTopic
+                  - sns:GetTopicAttributes
+                  - sns:ListSubscriptionsByTopic
+                  - sns:SetTopicAttributes
+                  - sns:Subscribe
+                  - sns:TagResource
+                  - sns:Unsubscribe
+                  - sns:UntagResource
+                Resource: "*"
+              - Effect: Allow
+                Action:
                   - s3:CreateBucket
                   - s3:DeleteBucket
                   - s3:GetBucketAcl
-                  - s3:GetBucketEncryption
-                  - s3:GetBucketLifecycleConfiguration
+                  - s3:GetEncryptionConfiguration
+                  - s3:GetLifecycleConfiguration
                   - s3:GetBucketLocation
                   - s3:GetBucketPolicy
                   - s3:GetBucketPublicAccessBlock
                   - s3:GetBucketTagging
-                  - s3:PutBucketEncryption
-                  - s3:PutBucketLifecycleConfiguration
+                  - s3:PutEncryptionConfiguration
+                  - s3:PutLifecycleConfiguration
                   - s3:PutBucketPublicAccessBlock
                   - s3:PutBucketTagging
                 Resource: !Sub "arn:${AWS::Partition}:s3:::widthwatch-reports-${AWS::AccountId}-eu-west-1"
