@@ -34,13 +34,26 @@ try {
   const html = generateHtmlReport(comparison);
   const probeWidths = [640, 700, 720, 742, 755, 768, 790, 811, 820, 832, 900, 960];
   const captureWidths = [640, 742, 832, 960];
-  const twoPassOptions = { mode: "visual", exactWidths: captureWidths, probeWidths, viewportHeight: 720, reloadPerWidth: true, scrollSweep: false, settleMs: 0 };
+  const twoPassOptions = {
+    mode: "visual",
+    exactWidths: captureWidths,
+    probeWidths,
+    viewportHeight: 720,
+    reloadPerWidth: true,
+    scrollSweep: false,
+    settleMs: 0,
+  };
   const twoPassBaseline = await scanResponsive(`${origin}/widthwatch/proof-baseline.html`, twoPassOptions);
   const twoPassCandidate = await scanResponsive(`${origin}/widthwatch/proof-candidate.html`, twoPassOptions);
   twoPassBaseline.url = "https://damianociarla.github.io/widthwatch/proof-baseline.html";
   twoPassCandidate.url = "https://damianociarla.github.io/widthwatch/proof-candidate.html";
   const twoPassComparison = compareReports(twoPassBaseline, twoPassCandidate, { maxDiffRatio: 0.001, includeDiffImages: true });
-  if (twoPassComparison.passed || twoPassCandidate.probes?.length !== 12 || twoPassCandidate.frames.length !== 4 || !twoPassComparison.regressions.some((issue) => issue.width === 768 && issue.evidence === "discovery")) {
+  if (
+    twoPassComparison.passed ||
+    twoPassCandidate.probes?.length !== 12 ||
+    twoPassCandidate.frames.length !== 4 ||
+    !twoPassComparison.regressions.some((issue) => issue.width === 768 && issue.evidence === "discovery")
+  ) {
     throw new Error("The two-pass proof did not preserve its discovery-only regression across a 12-probe / 4-capture schedule.");
   }
   const twoPassHtml = generateHtmlReport(twoPassComparison);
@@ -52,7 +65,9 @@ try {
     writeFile(resolve("apps/web/public/proof-two-pass.html"), twoPassHtml, "utf8"),
     writeFile(resolve("apps/web/dist/proof-two-pass.html"), twoPassHtml, "utf8"),
   ]);
-  console.log(`Generated exact proof and two-pass proof with ${twoPassCandidate.probes.length} probes, ${twoPassCandidate.frames.length} captures and preserved discovery-only findings.`);
+  console.log(
+    `Generated exact proof and two-pass proof with ${twoPassCandidate.probes.length} probes, ${twoPassCandidate.frames.length} captures and preserved discovery-only findings.`,
+  );
 } finally {
   preview.kill("SIGTERM");
 }

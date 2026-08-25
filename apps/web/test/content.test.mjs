@@ -6,6 +6,9 @@ test("landing exposes the scanner, docs and published package command", async ()
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /Trace a public page/);
   assert.match(html, /npx widthwatch https:\/\/your-site\.com/);
+  assert.match(html, /Open source · Available on npm/);
+  assert.match(html, /Bounded public demo · 5 adaptive samples/);
+  assert.match(html, /Local\/CI scans use the full configurable schedule/);
   assert.match(html, /data-copy=/);
   assert.match(html, /docs\.html/);
   assert.match(html, /id="reportLink"/);
@@ -15,7 +18,7 @@ test("landing exposes the scanner, docs and published package command", async ()
   assert.match(html, /application\/ld\+json/);
   assert.match(html, /og-widthwatch\.png/);
   assert.match(html, /summary_large_image/);
-  assert.match(html, /softwareVersion":"0\.4\.1/);
+  assert.match(html, /softwareVersion":"0\.4\.2/);
   assert.match(html, /id="navToggle"/);
   assert.match(html, /Reproducible evidence/);
   assert.match(html, /href="\.\/proof\.html"/);

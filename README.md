@@ -20,7 +20,7 @@ npx widthwatch init
 
 The engine returns versioned TypeScript objects, renders a portable interactive HTML report, and compares a candidate page with a baseline at matching widths. Its adaptive sampler discovers where geometry changes and spends the screenshot budget around those intervals instead of pretending that mobile/tablet/desktop are the whole responsive surface.
 
-## What exists in v0.3
+## What exists in v0.4
 
 - adaptive 320–1440px width timeline;
 - two-pass visual scanning: fast geometry discovery followed by bounded full-page evidence capture;
@@ -106,8 +106,11 @@ Node.js 22 or newer and Chromium are required. The complete monorepo and the pub
 ```bash
 npm ci
 npx playwright install chromium
+npm run lint
+npm run format:check
 npm run typecheck
 npm test
+npm run coverage
 npm run dev
 ```
 

@@ -43,7 +43,9 @@ async function main(): Promise<void> {
   }
   if (parsed.command === "init") {
     const created = await initializeProject();
-    console.log(`WidthWatch initialized:\n${created.map((path) => `  ${path}`).join("\n")}\nCommit a trusted .widthwatch/baseline.json before enabling regression failures.`);
+    console.log(
+      `WidthWatch initialized:\n${created.map((path) => `  ${path}`).join("\n")}\nCommit a trusted .widthwatch/baseline.json before enabling regression failures.`,
+    );
     return;
   }
 
@@ -59,15 +61,25 @@ async function main(): Promise<void> {
   const outputPath = resolve(parsed.output ?? configured?.output ?? "widthwatch-report.html");
   const jsonPath = parsed.json ?? configured?.json;
   const baselinePath = parsed.baseline ?? configured?.baseline;
-  const baseline = baselinePath ? JSON.parse(await readFile(resolve(baselinePath), "utf8")) as WidthWatchReport : undefined;
-  if (baseline && (parsed.minWidth !== undefined || parsed.maxWidth !== undefined || parsed.maxSamples !== undefined || parsed.maxCaptures !== undefined || parsed.layoutOnly || parsed.reloadPerWidth || parsed.fullPage)) {
+  const baseline = baselinePath ? (JSON.parse(await readFile(resolve(baselinePath), "utf8")) as WidthWatchReport) : undefined;
+  if (
+    baseline &&
+    (parsed.minWidth !== undefined ||
+      parsed.maxWidth !== undefined ||
+      parsed.maxSamples !== undefined ||
+      parsed.maxCaptures !== undefined ||
+      parsed.layoutOnly ||
+      parsed.reloadPerWidth ||
+      parsed.fullPage)
+  ) {
     throw new Error("A baseline controls the exact width and capture schedule; remove width, sample and capture mode flags.");
   }
 
   console.log(`WidthWatch · scanning ${url}`);
   const scanOptions = applyCliScanOptions(configured?.scan, parsed);
   if (baseline) {
-    if (baseline.capture?.protocolVersion !== CAPTURE_PROTOCOL_VERSION) throw new Error("The baseline uses an unsupported capture protocol. Re-capture it with this WidthWatch version.");
+    if (baseline.capture?.protocolVersion !== CAPTURE_PROTOCOL_VERSION)
+      throw new Error("The baseline uses an unsupported capture protocol. Re-capture it with this WidthWatch version.");
     scanOptions.exactWidths = baseline.frames.map((frame) => frame.width);
     if (baseline.probes?.length) scanOptions.probeWidths = baseline.probes.map((probe) => probe.width);
     scanOptions.viewportHeight = baseline.range.height;
@@ -98,7 +110,9 @@ async function main(): Promise<void> {
     await writeFile(resolvedJson, JSON.stringify(report, null, 2), "utf8");
   }
   console.log(`Report: ${outputPath}`);
-  console.log(`${report.summary.errors} errors · ${report.summary.warnings} warnings · ${report.frames.length} captured widths${report.sampling?.discoveryWidths.length ? ` from ${report.sampling.discoveryWidths.length} discovery probes` : ""}`);
+  console.log(
+    `${report.summary.errors} errors · ${report.summary.warnings} warnings · ${report.frames.length} captured widths${report.sampling?.discoveryWidths.length ? ` from ${report.sampling.discoveryWidths.length} discovery probes` : ""}`,
+  );
   const failOnRegression = parsed.failOnRegression || configured?.failOnRegression;
   if ("passed" in rendered && !rendered.passed && failOnRegression) process.exitCode = 1;
 }

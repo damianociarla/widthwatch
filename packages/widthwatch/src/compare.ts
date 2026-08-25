@@ -88,7 +88,10 @@ export function compareReports(baseline: WidthWatchReport, candidate: WidthWatch
     resolved,
     escalated,
     deescalated,
-    regressionRanges: groupIssuesByRange(candidateProbes.map((probe) => probe.width), regressions),
+    regressionRanges: groupIssuesByRange(
+      candidateProbes.map((probe) => probe.width),
+      regressions,
+    ),
     settings: { threshold, maxDiffRatio },
     valid,
     validationErrors,
@@ -106,17 +109,39 @@ function validateCompatibility(
 ): ComparisonError[] {
   const errors: ComparisonError[] = [];
   if (baseline.range.min !== candidate.range.min || baseline.range.max !== candidate.range.max || baseline.range.height !== candidate.range.height) {
-    errors.push({ code: "range-mismatch", message: `Scan ranges differ: baseline is ${baseline.range.min}–${baseline.range.max}×${baseline.range.height}, candidate is ${candidate.range.min}–${candidate.range.max}×${candidate.range.height}.` });
+    errors.push({
+      code: "range-mismatch",
+      message: `Scan ranges differ: baseline is ${baseline.range.min}–${baseline.range.max}×${baseline.range.height}, candidate is ${candidate.range.min}–${candidate.range.max}×${candidate.range.height}.`,
+    });
   }
   const environmentKeys = ["browser", "platform"] as const;
   const changedEnvironment = environmentKeys.filter((key) => baseline.environment[key] !== candidate.environment[key]);
   if (changedEnvironment.length) {
     errors.push({ code: "environment-mismatch", message: `Rendering environments differ in: ${changedEnvironment.join(", ")}.` });
   }
-  const captureKeys = ["protocolVersion", "mode", "screenshot", "imageFormat", "imageQuality", "scrollSweep", "maxScrollSteps", "settleMs", "reloadPerWidth", "hideSelectors", "deviceScaleFactor", "colorScheme", "reducedMotion", "locale", "timezoneId", "pageReady", "readinessKey"] as const;
-  const changedCapture = !baseline.capture || !candidate.capture
-    ? captureKeys
-    : captureKeys.filter((key) => JSON.stringify(baseline.capture[key]) !== JSON.stringify(candidate.capture[key]));
+  const captureKeys = [
+    "protocolVersion",
+    "mode",
+    "screenshot",
+    "imageFormat",
+    "imageQuality",
+    "scrollSweep",
+    "maxScrollSteps",
+    "settleMs",
+    "reloadPerWidth",
+    "hideSelectors",
+    "deviceScaleFactor",
+    "colorScheme",
+    "reducedMotion",
+    "locale",
+    "timezoneId",
+    "pageReady",
+    "readinessKey",
+  ] as const;
+  const changedCapture =
+    !baseline.capture || !candidate.capture
+      ? captureKeys
+      : captureKeys.filter((key) => JSON.stringify(baseline.capture[key]) !== JSON.stringify(candidate.capture[key]));
   if (changedCapture.length) {
     errors.push({ code: "capture-mismatch", message: `Capture settings differ or are missing in: ${changedCapture.join(", ")}.` });
   }
@@ -125,7 +150,10 @@ function validateCompatibility(
   if (new Set(baselineProbeWidths).size !== baselineProbeWidths.length || new Set(candidateProbeWidths).size !== candidateProbeWidths.length) {
     errors.push({ code: "duplicate-width", message: "A report contains duplicate probe widths." });
   } else if (JSON.stringify(baselineProbeWidths) !== JSON.stringify(candidateProbeWidths)) {
-    errors.push({ code: "probe-schedule-mismatch", message: "Discovery probe schedules differ; reproduce the baseline probe schedule before comparing geometry findings." });
+    errors.push({
+      code: "probe-schedule-mismatch",
+      message: "Discovery probe schedules differ; reproduce the baseline probe schedule before comparing geometry findings.",
+    });
   }
   if (baselineByWidth.size !== baseline.frames.length) errors.push({ code: "duplicate-width", message: "Baseline contains duplicate frame widths." });
   if (candidateByWidth.size !== candidate.frames.length) errors.push({ code: "duplicate-width", message: "Candidate contains duplicate frame widths." });
@@ -135,10 +163,16 @@ function validateCompatibility(
       errors.push({ code: "missing-candidate-frame", width: frame.width, message: `Candidate is missing the required ${frame.width}px frame.` });
       continue;
     }
-    if (frame.height !== actual.height) errors.push({ code: "viewport-mismatch", width: frame.width, message: `Frame ${frame.width}px viewport heights differ: baseline is ${frame.height}px, candidate is ${actual.height}px.` });
+    if (frame.height !== actual.height)
+      errors.push({
+        code: "viewport-mismatch",
+        width: frame.width,
+        message: `Frame ${frame.width}px viewport heights differ: baseline is ${frame.height}px, candidate is ${actual.height}px.`,
+      });
   }
   for (const frame of candidate.frames) {
-    if (!baselineByWidth.has(frame.width)) errors.push({ code: "unexpected-candidate-frame", width: frame.width, message: `Candidate contains an unexpected ${frame.width}px frame.` });
+    if (!baselineByWidth.has(frame.width))
+      errors.push({ code: "unexpected-candidate-frame", width: frame.width, message: `Candidate contains an unexpected ${frame.width}px frame.` });
   }
   return errors;
 }

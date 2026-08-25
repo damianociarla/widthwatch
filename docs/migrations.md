@@ -1,5 +1,11 @@
 # Migration notes
 
+## v0.4.2
+
+This patch improves the public product surface and repository quality gates without changing report schema, sampling protocol or capture protocol. Existing baselines compatible with v0.4.0 and v0.4.1 remain compatible with v0.4.2.
+
+On narrow viewports, discovery-only results now omit the empty evidence viewer and show a single concise diagnostic. The landing discloses the bounded five-sample public schedule before a scan begins and uses a stable npm availability label instead of a patch-sensitive hero badge. Biome lint and format checks, minimum Node coverage thresholds, axe accessibility audits, and desktop plus mobile Chromium reporter E2E tests now run in CI.
+
 ## v0.4.1
 
 This patch improves the standalone reporter without changing report schema, sampling protocol or capture protocol. Existing baselines compatible with v0.4.0 remain compatible with v0.4.1.

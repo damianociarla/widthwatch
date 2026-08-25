@@ -14,9 +14,7 @@ export function groupIssuesByRange(widths: number[], issues: ResponsiveIssue[]):
 
   const ranges: ResponsiveIssueRange[] = [];
   for (const [identity, values] of grouped) {
-    const ordered = values
-      .filter((issue) => widthIndex.has(issue.width))
-      .sort((a, b) => (widthIndex.get(a.width) ?? 0) - (widthIndex.get(b.width) ?? 0));
+    const ordered = values.filter((issue) => widthIndex.has(issue.width)).sort((a, b) => (widthIndex.get(a.width) ?? 0) - (widthIndex.get(b.width) ?? 0));
     let current: ResponsiveIssue[] = [];
     for (const issue of ordered) {
       const previous = current.at(-1);
@@ -39,7 +37,7 @@ function toRange(identity: string, issues: ResponsiveIssue[], index: number, ord
   return {
     id: `${first.kind}-${hash(identity)}-${index}`,
     kind: first.kind,
-    severity: issues.reduce<Severity>((severity, issue) => severityRank(issue.severity) > severityRank(severity) ? issue.severity : severity, first.severity),
+    severity: issues.reduce<Severity>((severity, issue) => (severityRank(issue.severity) > severityRank(severity) ? issue.severity : severity), first.severity),
     from: Math.min(...sampledWidths),
     to: Math.max(...sampledWidths),
     sampledWidths,

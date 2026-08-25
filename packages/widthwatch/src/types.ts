@@ -2,13 +2,7 @@ import type { Page } from "playwright";
 
 export type Severity = "info" | "warning" | "error";
 
-export type IssueKind =
-  | "document-overflow"
-  | "element-overflow"
-  | "clipped-text"
-  | "overlap"
-  | "layout-jump"
-  | "visual-diff";
+export type IssueKind = "document-overflow" | "element-overflow" | "clipped-text" | "overlap" | "layout-jump" | "visual-diff";
 
 export interface Rect {
   x: number;

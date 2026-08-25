@@ -27,14 +27,22 @@ test("report store writes and reads private HTML objects", async () => {
 });
 
 test("report store treats missing objects as absent", async () => {
-  const store = new ReportStore("private-bucket", { async send() { throw Object.assign(new Error("missing"), { name: "NoSuchKey" }); } });
+  const store = new ReportStore("private-bucket", {
+    async send() {
+      throw Object.assign(new Error("missing"), { name: "NoSuchKey" });
+    },
+  });
   assert.equal(await store.get("abc-123"), undefined);
 });
 
 test("a persistence failure does not invalidate an in-memory report", async () => {
   const errors = [];
   const stored = await persistReportBestEffort(
-    { async put() { throw new Error("temporary S3 outage"); } },
+    {
+      async put() {
+        throw new Error("temporary S3 outage");
+      },
+    },
     "abc-123",
     "report",
     (error) => errors.push(error),

@@ -11,6 +11,15 @@ test("network policy blocks private and metadata ranges", () => {
 test("rate limits commit atomically", () => {
   const client = new SlidingWindowLimiter(1, 60_000);
   const global = new SlidingWindowLimiter(0, 60_000);
-  assert.equal(consumeRateLimits([{ limiter: client, key: "client" }, { limiter: global, key: "global" }], 1), false);
+  assert.equal(
+    consumeRateLimits(
+      [
+        { limiter: client, key: "client" },
+        { limiter: global, key: "global" },
+      ],
+      1,
+    ),
+    false,
+  );
   assert.equal(client.canConsume("client", 1), true);
 });

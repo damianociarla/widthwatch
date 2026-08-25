@@ -89,19 +89,44 @@ test("finding identity is stable across selector order and excludes occurrence m
 test("comparison reports new, resolved and ranged issues", () => {
   const baseline = report([320, 640]);
   const candidate = report([320, 640]);
-  baseline.frames[0].issues = [{ id: "old", kind: "clipped-text", severity: "error", width: 320, message: "old", elements: [{ selector: "#old", tagName: "p", rect: { x: 0, y: 0, width: 1, height: 1 } }] }];
-  for (const frame of candidate.frames) frame.issues = [{ id: `new-${frame.width}`, kind: "element-overflow", severity: "warning", width: frame.width, message: "new", elements: [{ selector: "#new", tagName: "p", rect: { x: 0, y: 0, width: 1, height: 1 } }] }];
+  baseline.frames[0].issues = [
+    {
+      id: "old",
+      kind: "clipped-text",
+      severity: "error",
+      width: 320,
+      message: "old",
+      elements: [{ selector: "#old", tagName: "p", rect: { x: 0, y: 0, width: 1, height: 1 } }],
+    },
+  ];
+  for (const frame of candidate.frames)
+    frame.issues = [
+      {
+        id: `new-${frame.width}`,
+        kind: "element-overflow",
+        severity: "warning",
+        width: frame.width,
+        message: "new",
+        elements: [{ selector: "#new", tagName: "p", rect: { x: 0, y: 0, width: 1, height: 1 } }],
+      },
+    ];
   const comparison = compareReports(baseline, candidate);
   assert.equal(comparison.regressions.length, 2);
   assert.equal(comparison.resolved.length, 1);
-  assert.deepEqual(comparison.regressionRanges.map((range) => [range.from, range.to, range.occurrences]), [[320, 640, 2]]);
+  assert.deepEqual(
+    comparison.regressionRanges.map((range) => [range.from, range.to, range.occurrences]),
+    [[320, 640, 2]],
+  );
 });
 
 test("missing and unexpected widths fail closed", () => {
   const comparison = compareReports(report([320]), report([321]));
   assert.equal(comparison.valid, false);
   assert.equal(comparison.passed, false);
-  assert.deepEqual(comparison.validationErrors.map((error) => error.code), ["range-mismatch", "probe-schedule-mismatch", "missing-candidate-frame", "unexpected-candidate-frame"]);
+  assert.deepEqual(
+    comparison.validationErrors.map((error) => error.code),
+    ["range-mismatch", "probe-schedule-mismatch", "missing-candidate-frame", "unexpected-candidate-frame"],
+  );
 });
 
 test("probe schedules fail closed independently from visual evidence schedules", () => {
@@ -114,7 +139,15 @@ test("probe schedules fail closed independently from visual evidence schedules",
 });
 
 test("probe-only findings remain valid regressions without entering pixel decoding", () => {
-  const finding = { id: "probe-only", kind: "clipped-text", severity: "error", width: 640, message: "probe regression", elements: [{ selector: "#probe", tagName: "p", rect: { x: 0, y: 0, width: 20, height: 10 } }], evidence: "discovery" };
+  const finding = {
+    id: "probe-only",
+    kind: "clipped-text",
+    severity: "error",
+    width: 640,
+    message: "probe regression",
+    elements: [{ selector: "#probe", tagName: "p", rect: { x: 0, y: 0, width: 20, height: 10 } }],
+    evidence: "discovery",
+  };
   const probe = (width, issues = []) => ({ width, height: 800, document: { width, height: 1000 }, layoutSignature: "stable", issues, durationMs: 1 });
   const baseline = report([320, 1120], { probes: [probe(320), probe(640), probe(1120)], issues: [] });
   const candidate = report([320, 1120], { probes: [probe(320), probe(640, [finding]), probe(1120)], issues: [finding] });
@@ -122,12 +155,26 @@ test("probe-only findings remain valid regressions without entering pixel decodi
   assert.equal(comparison.valid, true);
   assert.equal(comparison.passed, false);
   assert.deepEqual(comparison.regressions, [finding]);
-  assert.deepEqual(comparison.regressionRanges.map((range) => [range.from, range.to]), [[640, 640]]);
+  assert.deepEqual(
+    comparison.regressionRanges.map((range) => [range.from, range.to]),
+    [[640, 640]],
+  );
   assert.equal(comparison.diffs.length, 2);
 });
 
 test("probe-only severity escalation is a regression without becoming resolved", () => {
-  const finding = (severity) => ({ id: `overlap-${severity}`, kind: "overlap", severity, width: 640, message: severity, elements: [{ selector: "#alpha", tagName: "div", rect: { x: 0, y: 0, width: 20, height: 10 } }, { selector: "#beta", tagName: "div", rect: { x: 10, y: 0, width: 20, height: 10 } }], evidence: "discovery" });
+  const finding = (severity) => ({
+    id: `overlap-${severity}`,
+    kind: "overlap",
+    severity,
+    width: 640,
+    message: severity,
+    elements: [
+      { selector: "#alpha", tagName: "div", rect: { x: 0, y: 0, width: 20, height: 10 } },
+      { selector: "#beta", tagName: "div", rect: { x: 10, y: 0, width: 20, height: 10 } },
+    ],
+    evidence: "discovery",
+  });
   const probe = (width, issues = []) => ({ width, height: 800, document: { width, height: 1000 }, layoutSignature: "stable", issues, durationMs: 1 });
   const baseline = report([320, 640], { probes: [probe(320), probe(640, [finding("warning")])] });
   const candidate = report([320, 640], { probes: [probe(320), probe(640, [finding("error")])] });
@@ -141,7 +188,15 @@ test("probe-only severity escalation is a regression without becoming resolved",
 });
 
 test("severity de-escalation is reported separately from resolved findings", () => {
-  const finding = (severity) => ({ id: `clipped-${severity}`, kind: "clipped-text", severity, width: 640, message: severity, elements: [{ selector: "#copy", tagName: "p", rect: { x: 0, y: 0, width: 20, height: 10 } }], evidence: "discovery" });
+  const finding = (severity) => ({
+    id: `clipped-${severity}`,
+    kind: "clipped-text",
+    severity,
+    width: 640,
+    message: severity,
+    elements: [{ selector: "#copy", tagName: "p", rect: { x: 0, y: 0, width: 20, height: 10 } }],
+    evidence: "discovery",
+  });
   const probe = (issues) => ({ width: 640, height: 800, document: { width: 640, height: 1000 }, layoutSignature: "stable", issues, durationMs: 1 });
   const baseline = report([640], { probes: [probe([finding("error")])] });
   const candidate = report([640], { probes: [probe([finding("warning")])] });
@@ -153,7 +208,14 @@ test("severity de-escalation is reported separately from resolved findings", () 
 });
 
 test("optional canonical fallback retains capture-only findings when probes exist", () => {
-  const finding = { id: "lazy-capture", kind: "clipped-text", severity: "error", width: 640, message: "lazy", elements: [{ selector: "#lazy", tagName: "p", rect: { x: 0, y: 0, width: 20, height: 10 } }] };
+  const finding = {
+    id: "lazy-capture",
+    kind: "clipped-text",
+    severity: "error",
+    width: 640,
+    message: "lazy",
+    elements: [{ selector: "#lazy", tagName: "p", rect: { x: 0, y: 0, width: 20, height: 10 } }],
+  };
   const probe = { width: 640, height: 800, document: { width: 640, height: 1000 }, layoutSignature: "stable", issues: [], durationMs: 1 };
   const baseline = report([640], { probes: [probe] });
   const candidate = report([640], { probes: [probe] });
@@ -164,7 +226,14 @@ test("optional canonical fallback retains capture-only findings when probes exis
 });
 
 test("optional canonical fallback lets capture severity prevail over the same probe occurrence", () => {
-  const finding = (severity) => ({ id: `overlap-${severity}`, kind: "overlap", severity, width: 640, message: severity, elements: [{ selector: "#same", tagName: "div", rect: { x: 0, y: 0, width: 20, height: 10 } }] });
+  const finding = (severity) => ({
+    id: `overlap-${severity}`,
+    kind: "overlap",
+    severity,
+    width: 640,
+    message: severity,
+    elements: [{ selector: "#same", tagName: "div", rect: { x: 0, y: 0, width: 20, height: 10 } }],
+  });
   const probe = (issue) => ({ width: 640, height: 800, document: { width: 640, height: 1000 }, layoutSignature: "stable", issues: [issue], durationMs: 1 });
   const baseline = report([640], { probes: [probe(finding("warning"))] });
   baseline.frames[0].issues = [finding("warning")];

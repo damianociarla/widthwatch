@@ -11,7 +11,9 @@ for (const command of commands) {
       if (label) label.textContent = "Select text";
       command.querySelector("code")?.setAttribute("data-copy-failed", "true");
     }
-    window.setTimeout(() => { if (label) label.textContent = "Copy"; }, 1400);
+    window.setTimeout(() => {
+      if (label) label.textContent = "Copy";
+    }, 1400);
   });
 }
 
@@ -41,7 +43,9 @@ navToggle?.addEventListener("click", () => {
   primaryNav?.toggleAttribute("data-open", !expanded);
   if (!expanded) primaryNav?.querySelector<HTMLAnchorElement>("a")?.focus();
 });
-primaryNav?.querySelectorAll("a").forEach((link) => link.addEventListener("click", () => closeNavigation()));
+primaryNav?.querySelectorAll("a").forEach((link) => {
+  link.addEventListener("click", () => closeNavigation());
+});
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && navToggle?.getAttribute("aria-expanded") === "true") closeNavigation(true);
 });
@@ -49,7 +53,9 @@ document.addEventListener("pointerdown", (event) => {
   const target = event.target as Node;
   if (navToggle?.getAttribute("aria-expanded") === "true" && !navToggle.contains(target) && !primaryNav?.contains(target)) closeNavigation();
 });
-matchMedia("(min-width: 901px)").addEventListener("change", (event) => { if (event.matches) closeNavigation(); });
+matchMedia("(min-width: 901px)").addEventListener("change", (event) => {
+  if (event.matches) closeNavigation();
+});
 
 const heroWidth = document.querySelector<HTMLElement>("#heroWidth");
 if (heroWidth && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -87,18 +93,34 @@ form?.addEventListener("submit", async (event) => {
   if (submitButton) submitButton.disabled = true;
   try {
     if (apiUrl) {
-      const response = await fetch(`${apiUrl.replace(/\/$/, "")}/v1/scans`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url }), signal: controller.signal });
+      const response = await fetch(`${apiUrl.replace(/\/$/, "")}/v1/scans`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url }),
+        signal: controller.signal,
+      });
       if (run !== scanRun) return;
-      if (!response.ok) throw new Error(response.status === 429 ? "The public demo limit has been reached. Try the local package." : "The scan could not be accepted.");
-      const job = await response.json() as { id: string; status: string };
+      if (!response.ok)
+        throw new Error(response.status === 429 ? "The public demo limit has been reached. Try the local package." : "The scan could not be accepted.");
+      const job = (await response.json()) as { id: string; status: string };
       if (run !== scanRun) return;
       state.textContent = `● ${job.status}`;
-      message.textContent = job.status === "complete" ? "Scan complete. Preparing the interactive report…" : `Scan ${job.id.slice(0, 8)} accepted. Waiting for the bounded worker…`;
+      message.textContent =
+        job.status === "complete" ? "Scan complete. Preparing the interactive report…" : `Scan ${job.id.slice(0, 8)} accepted. Waiting for the bounded worker…`;
       for (let attempt = 0; attempt < 45; attempt += 1) {
         const statusResponse = await fetch(`${apiUrl.replace(/\/$/, "")}/v1/scans/${job.id}`, { signal: controller.signal });
         if (run !== scanRun) return;
         if (!statusResponse.ok) throw new Error("The scan result is no longer available.");
-        const result = await statusResponse.json() as { status: string; error?: string; reportUrl?: string; report?: { probes?: Array<{ width: number; severities: string[] }>; frames: Array<{ width: number; issues: Array<{ severity: string }> }>; summary: { errors: number; warnings: number; sampledWidths: number } } };
+        const result = (await statusResponse.json()) as {
+          status: string;
+          error?: string;
+          reportUrl?: string;
+          report?: {
+            probes?: Array<{ width: number; severities: string[] }>;
+            frames: Array<{ width: number; issues: Array<{ severity: string }> }>;
+            summary: { errors: number; warnings: number; sampledWidths: number };
+          };
+        };
         if (run !== scanRun) return;
         state.textContent = `● ${result.status}`;
         if (result.status === "failed") throw new Error(result.error ?? "The bounded scan could not complete.");
@@ -109,10 +131,11 @@ form?.addEventListener("submit", async (event) => {
         }
         timeline.innerHTML = "";
         const capturedWidths = new Set(result.report.frames.map((frame) => frame.width));
-        const markers = result.report.probes ?? result.report.frames.map((frame) => ({ width: frame.width, severities: frame.issues.map((issue) => issue.severity) }));
+        const markers =
+          result.report.probes ?? result.report.frames.map((frame) => ({ width: frame.width, severities: frame.issues.map((issue) => issue.severity) }));
         for (const marker of markers) {
           const mark = document.createElement("i");
-          mark.style.left = `${(marker.width - 320) / 1120 * 100}%`;
+          mark.style.left = `${((marker.width - 320) / 1120) * 100}%`;
           if (!capturedWidths.has(marker.width)) mark.classList.add("probe");
           if (marker.severities.includes("error")) mark.classList.add("hot");
           timeline.append(mark);
@@ -131,7 +154,7 @@ form?.addEventListener("submit", async (event) => {
     for (const [index, width] of [320, 480, 640, 768, 853, 1024, 1280, 1440].entries()) {
       await new Promise((resolve) => window.setTimeout(resolve, 110));
       const mark = document.createElement("i");
-      mark.style.left = `${(width - 320) / 1120 * 100}%`;
+      mark.style.left = `${((width - 320) / 1120) * 100}%`;
       if (width === 853) mark.className = "hot";
       timeline.append(mark);
       message.textContent = `Sampling ${width}px · ${index + 1}/8`;

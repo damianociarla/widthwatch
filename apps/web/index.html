@@ -15,7 +15,7 @@
     <meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://damianociarla.github.io/widthwatch/og-widthwatch.png" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"WidthWatch","applicationCategory":"DeveloperApplication","operatingSystem":"Node.js","softwareVersion":"0.4.1","url":"https://damianociarla.github.io/widthwatch/","downloadUrl":"https://www.npmjs.com/package/widthwatch","license":"https://opensource.org/licenses/MIT"}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"WidthWatch","applicationCategory":"DeveloperApplication","operatingSystem":"Node.js","softwareVersion":"0.4.2","url":"https://damianociarla.github.io/widthwatch/","downloadUrl":"https://www.npmjs.com/package/widthwatch","license":"https://opensource.org/licenses/MIT"}</script>
     <title>WidthWatch · Adaptive responsive regression testing</title>
   </head>
   <body>
@@ -30,7 +30,7 @@
     <main id="main">
       <section class="hero" id="top">
         <div class="hero-copy reveal">
-          <p class="eyebrow">Open source · v0.4 on npm</p>
+          <p class="eyebrow">Open source · Available on npm</p>
           <h1>Find the width<br>where it <em>breaks.</em></h1>
           <p class="lede">WidthWatch adaptively samples the space between mobile and desktop, then turns layout discontinuities into evidence your pull request can act on.</p>
           <button class="command" data-widthwatch-ignore data-copy="npx widthwatch https://your-site.com" type="button"><code>npx widthwatch https://your-site.com</code><span>Copy</span></button>
@@ -47,6 +47,7 @@
       <section class="live" id="demo">
         <div class="section-head reveal"><p class="eyebrow">Public scanner / bounded beta</p><h2>Trace a public page.</h2><p>One URL. A controlled width range. No login, cookies, or private networks.</p></div>
         <form class="scanner" id="scanForm">
+          <p class="demo-scope"><strong>Bounded public demo · 5 adaptive samples</strong><span>Local/CI scans use the full configurable schedule.</span></p>
           <label for="url">Website URL</label><div class="input-row"><input id="url" name="url" type="url" required placeholder="https://example.com" autocomplete="url"><button type="submit">Analyze <span>→</span></button></div>
           <p>By continuing, you confirm you are authorized to test this public page.</p>
         </form>

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import AxeBuilder from "@axe-core/playwright";
 import { chromium } from "playwright";
 import { generateHtmlReport } from "../dist/index.js";
 
@@ -25,34 +26,58 @@ function report(issues, frames) {
     scannedAt: new Date(0).toISOString(),
     durationMs: 10,
     range: { min: 800, max: 1200, height: 800 },
-    environment: { browser: "chromium", platform: "test", packageVersion: "0.4.1" },
+    environment: { browser: "chromium", platform: "test", packageVersion: "0.4.2" },
     sampling: {
       protocolVersion: 2,
       strategy: "adaptive-two-pass",
       discoveryWidths: widths,
       capturedWidths: frames.map((frame) => frame.width),
     },
-    probes: widths.map((width) => probe(width, issues.filter((issue) => issue.width === width))),
+    probes: widths.map((width) =>
+      probe(
+        width,
+        issues.filter((issue) => issue.width === width),
+      ),
+    ),
     issues,
     frames,
     transitions: [],
-    summary: { errors: issues.filter((issue) => issue.severity === "error").length, warnings: issues.filter((issue) => issue.severity === "warning").length, info: 0, sampledWidths: widths.length },
+    summary: {
+      errors: issues.filter((issue) => issue.severity === "error").length,
+      warnings: issues.filter((issue) => issue.severity === "warning").length,
+      info: 0,
+      sampledWidths: widths.length,
+    },
   };
 }
 
-test("reporter executes dense timeline, accessible tabs, focus, and discovery-only mobile layout", { timeout: 30_000 }, async () => {
+function comparisonFixture() {
   const element = { selector: ".checkout-actions > button", tagName: "button", rect: { x: 10, y: 20, width: 120, height: 32 } };
-  const baselineIssue = { id: "baseline-warning", kind: "clipped-text", severity: "warning", width: 905, message: "CTA is nearly clipped", elements: [element], evidence: "discovery" };
+  const baselineIssue = {
+    id: "baseline-warning",
+    kind: "clipped-text",
+    severity: "warning",
+    width: 905,
+    message: "CTA is nearly clipped",
+    elements: [element],
+    evidence: "discovery",
+  };
   const candidateIssue = { ...baselineIssue, id: "candidate-error", severity: "error", message: "CTA is clipped" };
-  const baseline = report([baselineIssue], [
-    { ...probe(900), screenshot: pixel },
-    { ...probe(920), screenshot: pixel },
-  ]);
-  const candidate = report([candidateIssue], [
-    { ...probe(900), screenshot: pixel },
-    { ...probe(920), screenshot: pixel },
-  ]);
-  const comparison = {
+  const baseline = report(
+    [baselineIssue],
+    [
+      { ...probe(900), screenshot: pixel },
+      { ...probe(920), screenshot: pixel },
+    ],
+  );
+  const candidate = report(
+    [candidateIssue],
+    [
+      { ...probe(900), screenshot: pixel },
+      { ...probe(920), screenshot: pixel },
+    ],
+  );
+  return {
     version: 1,
     baseline,
     candidate,
@@ -64,15 +89,40 @@ test("reporter executes dense timeline, accessible tabs, focus, and discovery-on
     escalated: [{ baseline: baselineIssue, candidate: candidateIssue }],
     deescalated: [],
     resolved: [],
-    regressionRanges: [{ kind: "clipped-text", severity: "error", message: candidateIssue.message, elements: [element], from: 905, to: 905, sampledWidths: [905], cleanBefore: 900, cleanAfter: 910 }],
+    regressionRanges: [
+      {
+        kind: "clipped-text",
+        severity: "error",
+        message: candidateIssue.message,
+        elements: [element],
+        from: 905,
+        to: 905,
+        sampledWidths: [905],
+        cleanBefore: 900,
+        cleanAfter: 910,
+      },
+    ],
     valid: true,
     validationErrors: [],
     passed: false,
   };
+}
+
+async function assertNoSeriousAccessibilityViolations(page) {
+  const results = await new AxeBuilder({ page }).analyze();
+  const violations = results.violations
+    .filter((violation) => violation.impact === "serious" || violation.impact === "critical")
+    .map((violation) => ({ id: violation.id, impact: violation.impact, targets: violation.nodes.map((node) => node.target.join(" ")) }));
+  assert.deepEqual(violations, []);
+}
+
+test("reporter executes dense timeline, accessible tabs, focus, and discovery-only mobile layout", { timeout: 30_000 }, async () => {
+  const comparison = comparisonFixture();
 
   const browser = await chromium.launch({ headless: true });
   try {
-    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const page = await context.newPage();
     const runtimeErrors = [];
     page.on("pageerror", (error) => runtimeErrors.push(error.message));
     await page.setContent(generateHtmlReport(comparison), { waitUntil: "load" });
@@ -81,22 +131,31 @@ test("reporter executes dense timeline, accessible tabs, focus, and discovery-on
     assert.equal(await slider.getAttribute("aria-valuenow"), "905");
     assert.match(await slider.getAttribute("aria-valuetext"), /geometry probe only, error finding/);
 
-    const markers = await page.locator(".tick").evaluateAll((items) => items.map((item) => ({ left: item.getBoundingClientRect().left, clustered: item.classList.contains("clustered") })));
+    const markers = await page
+      .locator(".tick")
+      .evaluateAll((items) => items.map((item) => ({ left: item.getBoundingClientRect().left, clustered: item.classList.contains("clustered") })));
     assert.equal(markers.length, 4);
-    assert.equal(markers.every((marker) => marker.clustered), true);
-    assert.deepEqual(markers.map((marker) => marker.left), [...markers.map((marker) => marker.left)].sort((a, b) => a - b));
+    assert.equal(
+      markers.every((marker) => marker.clustered),
+      true,
+    );
+    assert.deepEqual(
+      markers.map((marker) => marker.left),
+      [...markers.map((marker) => marker.left)].sort((a, b) => a - b),
+    );
 
     const timelineBox = await page.locator("#timeline").boundingBox();
     assert.ok(timelineBox);
     await page.mouse.click(timelineBox.x + timelineBox.width * ((905 - 800) / 400), timelineBox.y + 52);
     assert.equal(await slider.getAttribute("aria-valuenow"), "905");
 
-    const findingBox = await page.locator("#mobileDiagnostic .issue").boundingBox();
-    const viewerBox = await page.locator("#evidencePanel").boundingBox();
-    assert.ok(findingBox && viewerBox);
-    assert.ok(findingBox.y + findingBox.height <= viewerBox.y, "the actionable finding should precede visual evidence on mobile");
-    assert.ok(viewerBox.height <= 130, `discovery-only viewer should be compact, got ${viewerBox.height}px`);
+    assert.equal(await page.locator("#mobileDiagnostic .issue").isVisible(), true);
+    assert.equal(await page.locator("#evidencePanel").isHidden(), true);
     assert.equal(await page.locator("#evidencePanel").getAttribute("class"), "viewer no-capture");
+    const visibleDiagnostics = await page
+      .getByText("Detected during discovery; visual evidence was not captured at this width.", { exact: true })
+      .evaluateAll((items) => items.filter((item) => item.getClientRects().length > 0).length);
+    assert.equal(visibleDiagnostics, 1);
 
     await slider.focus();
     await slider.press("End");
@@ -123,6 +182,44 @@ test("reporter executes dense timeline, accessible tabs, focus, and discovery-on
     await page.waitForFunction(() => document.activeElement?.getAttribute("data-issue-id") === "candidate-error");
     assert.equal(await slider.getAttribute("aria-valuenow"), "905");
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await assertNoSeriousAccessibilityViolations(page);
+    assert.deepEqual(runtimeErrors, []);
+  } finally {
+    await browser.close();
+  }
+});
+
+test("reporter keeps desktop evidence, responsive issue placement, and accessibility intact", { timeout: 30_000 }, async () => {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await context.newPage();
+    const runtimeErrors = [];
+    page.on("pageerror", (error) => runtimeErrors.push(error.message));
+    await page.setContent(generateHtmlReport(comparisonFixture()), { waitUntil: "load" });
+
+    const evidence = page.locator("#evidencePanel");
+    assert.equal(await page.locator("#mobileDiagnostic").isHidden(), true);
+    assert.equal(await evidence.isVisible(), true);
+    assert.equal(await evidence.getAttribute("class"), "viewer no-capture");
+    assert.equal(await page.locator("#issues").evaluate((element) => element.parentElement?.id), "desktopIssuesSlot");
+    assert.equal(
+      await page
+        .getByText("Detected during discovery; visual evidence was not captured at this width.", { exact: true })
+        .evaluateAll((items) => items.filter((item) => item.getClientRects().length > 0).length),
+      1,
+    );
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+    await assertNoSeriousAccessibilityViolations(page);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForFunction(() => document.querySelector("#issues")?.parentElement?.id === "mobileIssuesSlot");
+    assert.equal(await page.locator("#issues").evaluate((element) => element.parentElement?.id), "mobileIssuesSlot");
+    assert.equal(await evidence.isHidden(), true);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.waitForFunction(() => document.querySelector("#issues")?.parentElement?.id === "desktopIssuesSlot");
+    assert.equal(await page.locator("#issues").evaluate((element) => element.parentElement?.id), "desktopIssuesSlot");
+    assert.equal(await evidence.isVisible(), true);
     assert.deepEqual(runtimeErrors, []);
   } finally {
     await browser.close();

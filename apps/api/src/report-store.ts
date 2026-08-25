@@ -10,7 +10,7 @@ export class ReportStore {
 
   constructor(bucket = process.env.REPORT_BUCKET, client?: S3Sender) {
     this.#bucket = bucket?.trim() || undefined;
-    this.#client = this.#bucket ? client ?? new S3Client({}) : undefined;
+    this.#client = this.#bucket ? (client ?? new S3Client({})) : undefined;
   }
 
   get persistent(): boolean {
@@ -19,20 +19,24 @@ export class ReportStore {
 
   async put(id: string, html: string): Promise<void> {
     if (!this.#bucket || !this.#client) return;
-    await this.#client.send(new PutObjectCommand({
-      Bucket: this.#bucket,
-      Key: keyFor(id),
-      Body: html,
-      ContentType: "text/html; charset=utf-8",
-      CacheControl: "private, max-age=60",
-      ServerSideEncryption: "AES256",
-    }));
+    await this.#client.send(
+      new PutObjectCommand({
+        Bucket: this.#bucket,
+        Key: keyFor(id),
+        Body: html,
+        ContentType: "text/html; charset=utf-8",
+        CacheControl: "private, max-age=60",
+        ServerSideEncryption: "AES256",
+      }),
+    );
   }
 
   async get(id: string): Promise<string | undefined> {
     if (!this.#bucket || !this.#client) return undefined;
     try {
-      const result = await this.#client.send(new GetObjectCommand({ Bucket: this.#bucket, Key: keyFor(id) })) as { Body?: { transformToString(): Promise<string> } };
+      const result = (await this.#client.send(new GetObjectCommand({ Bucket: this.#bucket, Key: keyFor(id) }))) as {
+        Body?: { transformToString(): Promise<string> };
+      };
       return result.Body?.transformToString();
     } catch (error) {
       if (isMissing(error)) return undefined;

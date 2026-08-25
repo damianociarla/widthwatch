@@ -9,7 +9,10 @@ export function defineConfig(config: WidthWatchConfig): WidthWatchConfig {
   return config;
 }
 
-export async function loadWidthWatchConfig(explicitPath?: string, cwd = process.cwd()): Promise<{ config: WidthWatchConfig; path: string; directory: string } | undefined> {
+export async function loadWidthWatchConfig(
+  explicitPath?: string,
+  cwd = process.cwd(),
+): Promise<{ config: WidthWatchConfig; path: string; directory: string } | undefined> {
   const path = explicitPath ? resolve(cwd, explicitPath) : await findConfig(cwd);
   if (!path) return undefined;
   try {
@@ -17,7 +20,7 @@ export async function loadWidthWatchConfig(explicitPath?: string, cwd = process.
   } catch {
     throw new Error(`WidthWatch config not found: ${path}`);
   }
-  const imported = await import(`${pathToFileURL(path).href}?widthwatch=${Date.now()}`) as { default?: unknown };
+  const imported = (await import(`${pathToFileURL(path).href}?widthwatch=${Date.now()}`)) as { default?: unknown };
   const config = imported.default;
   if (!config || typeof config !== "object" || Array.isArray(config)) throw new Error("WidthWatch config must default-export an object.");
   const typed = config as Partial<WidthWatchConfig>;
@@ -26,9 +29,12 @@ export async function loadWidthWatchConfig(explicitPath?: string, cwd = process.
   for (const key of ["output", "json", "baseline"] as const) {
     if (typed[key] !== undefined && typeof typed[key] !== "string") throw new Error(`WidthWatch config ${key} must be a string.`);
   }
-  if (typed.failOnRegression !== undefined && typeof typed.failOnRegression !== "boolean") throw new Error("WidthWatch config failOnRegression must be a boolean.");
-  if (typed.scan !== undefined && (!typed.scan || typeof typed.scan !== "object" || Array.isArray(typed.scan))) throw new Error("WidthWatch config scan must be an object.");
-  if (typed.compare !== undefined && (!typed.compare || typeof typed.compare !== "object" || Array.isArray(typed.compare))) throw new Error("WidthWatch config compare must be an object.");
+  if (typed.failOnRegression !== undefined && typeof typed.failOnRegression !== "boolean")
+    throw new Error("WidthWatch config failOnRegression must be a boolean.");
+  if (typed.scan !== undefined && (!typed.scan || typeof typed.scan !== "object" || Array.isArray(typed.scan)))
+    throw new Error("WidthWatch config scan must be an object.");
+  if (typed.compare !== undefined && (!typed.compare || typeof typed.compare !== "object" || Array.isArray(typed.compare)))
+    throw new Error("WidthWatch config compare must be an object.");
   return { config: typed as WidthWatchConfig, path, directory: dirname(path) };
 }
 

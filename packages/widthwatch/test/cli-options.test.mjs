@@ -8,7 +8,17 @@ import test from "node:test";
 import { applyCliScanOptions, parseCliOptions } from "../dist/cli-options.js";
 
 test("CLI accepts value options before the URL without treating their values as the URL", () => {
-  const parsed = parseCliOptions(["--output", "report.html", "--max-samples", "8", "--max-captures", "4", "--layout-only", "--reload-per-width", "https://example.com"]);
+  const parsed = parseCliOptions([
+    "--output",
+    "report.html",
+    "--max-samples",
+    "8",
+    "--max-captures",
+    "4",
+    "--layout-only",
+    "--reload-per-width",
+    "https://example.com",
+  ]);
   assert.equal(parsed.url, "https://example.com");
   assert.equal(parsed.output, "report.html");
   assert.equal(parsed.maxSamples, 8);

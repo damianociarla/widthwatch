@@ -41,12 +41,30 @@ export function parseCliOptions(args: string[]): ParsedCliOptions {
   };
   for (let index = parsed.command === "init" ? 1 : 0; index < args.length; index += 1) {
     const argument = args[index]!;
-    if (argument === "--full-page") { parsed.fullPage = true; continue; }
-    if (argument === "--layout-only") { parsed.layoutOnly = true; continue; }
-    if (argument === "--reload-per-width") { parsed.reloadPerWidth = true; continue; }
-    if (argument === "--fail-on-regression") { parsed.failOnRegression = true; continue; }
-    if (argument === "--help") { parsed.help = true; continue; }
-    if (argument === "--version") { parsed.version = true; continue; }
+    if (argument === "--full-page") {
+      parsed.fullPage = true;
+      continue;
+    }
+    if (argument === "--layout-only") {
+      parsed.layoutOnly = true;
+      continue;
+    }
+    if (argument === "--reload-per-width") {
+      parsed.reloadPerWidth = true;
+      continue;
+    }
+    if (argument === "--fail-on-regression") {
+      parsed.failOnRegression = true;
+      continue;
+    }
+    if (argument === "--help") {
+      parsed.help = true;
+      continue;
+    }
+    if (argument === "--version") {
+      parsed.version = true;
+      continue;
+    }
     const key = valueOptions.get(argument);
     if (key) {
       const value = args[index + 1];

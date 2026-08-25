@@ -86,10 +86,12 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
     mode,
     screenshot: options.screenshot ?? (mode === "visual" ? "full-page" : "viewport"),
     scrollSweep: options.scrollSweep ?? mode === "visual",
-    ...(derivableWidths ? {
-      minWidth: options.minWidth ?? Math.min(...derivableWidths),
-      maxWidth: options.maxWidth ?? Math.max(...derivableWidths),
-    } : {}),
+    ...(derivableWidths
+      ? {
+          minWidth: options.minWidth ?? Math.min(...derivableWidths),
+          maxWidth: options.maxWidth ?? Math.max(...derivableWidths),
+        }
+      : {}),
     exactWidths: requestedWidths,
     probeWidths: requestedProbeWidths,
     pageReady: options.pageReady,
@@ -98,10 +100,7 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
     proxyServer: options.proxyServer,
     maxRequestsPerNavigation: options.maxRequestsPerNavigation ?? options.maxRequests ?? defaults.maxRequestsPerNavigation,
     maxTotalRequests: options.maxTotalRequests ?? options.maxRequests ?? defaults.maxTotalRequests,
-    maxCaptureSamples: Math.min(
-      options.maxCaptureSamples ?? defaults.maxCaptureSamples,
-      options.maxSamples ?? defaults.maxSamples,
-    ),
+    maxCaptureSamples: Math.min(options.maxCaptureSamples ?? defaults.maxCaptureSamples, options.maxSamples ?? defaults.maxSamples),
   };
   validateOptions(config);
   const normalizedUrl = normalizeUrl(url);
@@ -138,10 +137,7 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
       discoveryWidths = [];
       samplingStrategy = "exact";
     } else if (config.mode === "visual") {
-      const discovered = await sampleAdaptiveFrames(
-        (width) => probeDiscoveryFrame(page, normalizedUrl, width, config, requestBudget),
-        config,
-      );
+      const discovered = await sampleAdaptiveFrames((width) => probeDiscoveryFrame(page, normalizedUrl, width, config, requestBudget), config);
       probes = discovered;
       discoveryWidths = [...discovered.keys()].sort((a, b) => a - b);
       const captureWidths = selectVisualCaptureWidths(discovered, config.maxCaptureSamples);
@@ -153,10 +149,7 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
       for (const width of captureWidths) frames.set(width, await captureFrame(page, normalizedUrl, width, config, requestBudget));
       samplingStrategy = "adaptive-two-pass";
     } else {
-      frames = await sampleAdaptiveFrames(
-        (width) => captureFrame(page, normalizedUrl, width, config, requestBudget),
-        config,
-      );
+      frames = await sampleAdaptiveFrames((width) => captureFrame(page, normalizedUrl, width, config, requestBudget), config);
       probes = new Map([...frames].map(([width, frame]) => [width, toProbe(frame)]));
       discoveryWidths = [...frames.keys()].sort((a, b) => a - b);
       samplingStrategy = "adaptive-single-pass";
@@ -204,7 +197,10 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
       issues,
       frames: orderedFrames,
       transitions,
-      issueRanges: groupIssuesByRange(orderedProbes.map((probe) => probe.width), issues),
+      issueRanges: groupIssuesByRange(
+        orderedProbes.map((probe) => probe.width),
+        issues,
+      ),
       summary: {
         errors: issues.filter((issue) => issue.severity === "error").length,
         warnings: issues.filter((issue) => issue.severity === "warning").length,
@@ -222,14 +218,27 @@ export function scanAtWidths(url: string, widths: number[], options: Omit<ScanOp
   return scanResponsive(url, { ...options, exactWidths: widths });
 }
 
-type ReportScheduleOptions = Omit<ScanOptions,
-  | "exactWidths" | "probeWidths" | "minWidth" | "maxWidth" | "viewportHeight"
-  | "mode" | "screenshot" | "imageFormat" | "imageQuality" | "scrollSweep"
-  | "maxScrollSteps" | "settleMs" | "reloadPerWidth" | "hideSelectors"
+type ReportScheduleOptions = Omit<
+  ScanOptions,
+  | "exactWidths"
+  | "probeWidths"
+  | "minWidth"
+  | "maxWidth"
+  | "viewportHeight"
+  | "mode"
+  | "screenshot"
+  | "imageFormat"
+  | "imageQuality"
+  | "scrollSweep"
+  | "maxScrollSteps"
+  | "settleMs"
+  | "reloadPerWidth"
+  | "hideSelectors"
 >;
 
 export function scanAtReportSchedule(url: string, baseline: WidthWatchReport, options: ReportScheduleOptions = {}): Promise<WidthWatchReport> {
-  if (baseline.capture.pageReady && !options.pageReady) throw new Error("This baseline requires the same pageReady hook and readinessKey to reproduce its report schedule.");
+  if (baseline.capture.pageReady && !options.pageReady)
+    throw new Error("This baseline requires the same pageReady hook and readinessKey to reproduce its report schedule.");
   return scanResponsive(url, {
     ...options,
     exactWidths: baseline.frames.map((frame) => frame.width),
@@ -249,16 +258,14 @@ export function scanAtReportSchedule(url: string, baseline: WidthWatchReport, op
   });
 }
 
-async function sampleAdaptiveFrames<T extends FrameSignal>(
-  sample: (width: number) => Promise<T>,
-  config: ResolvedScanOptions,
-): Promise<Map<number, T>> {
+async function sampleAdaptiveFrames<T extends FrameSignal>(sample: (width: number) => Promise<T>, config: ResolvedScanOptions): Promise<Map<number, T>> {
   const frames = new Map<number, T>();
   const refinementsByBand = new Map<number, number>();
   const seeds = seedWidths(config.minWidth, config.maxWidth, config.initialStep);
-  const initialWidths = seeds.length <= config.maxSamples
-    ? seeds
-    : Array.from({ length: config.maxSamples }, (_, index) => seeds[Math.round(index * (seeds.length - 1) / (config.maxSamples - 1))]!);
+  const initialWidths =
+    seeds.length <= config.maxSamples
+      ? seeds
+      : Array.from({ length: config.maxSamples }, (_, index) => seeds[Math.round((index * (seeds.length - 1)) / (config.maxSamples - 1))]!);
   for (const width of new Set(initialWidths)) frames.set(width, await sample(width));
 
   while (frames.size < config.maxSamples) {
@@ -276,7 +283,7 @@ async function sampleAdaptiveFrames<T extends FrameSignal>(
       const band = Math.min(Math.floor((width - config.minWidth) / config.initialStep), Math.floor((config.maxWidth - config.minWidth) / config.initialStep));
       const refinements = refinementsByBand.get(band) ?? 0;
       const span = rightWidth - leftWidth;
-      const priority = transitionScore(left, right) / (1 + refinements) + Math.min(6, span / config.initialStep * 3);
+      const priority = transitionScore(left, right) / (1 + refinements) + Math.min(6, (span / config.initialStep) * 3);
       candidates.push({ width, priority, band, span });
     }
     const next = candidates.sort((a, b) => b.priority - a.priority || b.span - a.span || a.width - b.width)[0];
@@ -306,7 +313,7 @@ function selectVisualCaptureWidths(discovered: Map<number, FrameSignal>, target:
       .filter((frame) => !selected.has(frame.width))
       .map((frame) => {
         const nearest = Math.min(...[...selected].map((width) => Math.abs(width - frame.width)));
-        const coverage = nearest / Math.max(1, frames.at(-1)!.width - frames[0]!.width) * 100;
+        const coverage = (nearest / Math.max(1, frames.at(-1)!.width - frames[0]!.width)) * 100;
         const uncovered = new Map<string, number>();
         for (const finding of frame.issues) {
           const identity = issueIdentity(finding);
@@ -366,11 +373,14 @@ async function installNetworkPolicy(context: BrowserContext, config: ResolvedSca
     const request = route.request();
     if (config.blockResourceTypes.includes(request.resourceType())) return route.abort("blockedbyclient");
     if (config.allowedUrl && !(await config.allowedUrl(request.url()))) return route.abort("blockedbyclient");
-    if (request.isNavigationRequest() && request.resourceType() === "document" && request.frame() === request.frame().page().mainFrame()) budget.perNavigation = 0;
+    if (request.isNavigationRequest() && request.resourceType() === "document" && request.frame() === request.frame().page().mainFrame())
+      budget.perNavigation = 0;
     budget.perNavigation += 1;
     budget.total += 1;
     if (budget.perNavigation > config.maxRequestsPerNavigation) {
-      budget.error = new Error(`request budget exceeded for one navigation (${config.maxRequestsPerNavigation} allowed requests). Increase maxRequestsPerNavigation.`);
+      budget.error = new Error(
+        `request budget exceeded for one navigation (${config.maxRequestsPerNavigation} allowed requests). Increase maxRequestsPerNavigation.`,
+      );
       return route.abort("blockedbyclient");
     }
     if (budget.total > config.maxTotalRequests) {
@@ -408,45 +418,60 @@ async function preparePage(page: Page, url: string, width: number, config: Resol
   }, stabilizingCss);
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   if (config.pageReady) await withTimeout(Promise.resolve(config.pageReady(page, { url, width, phase })), config.pageReadyTimeoutMs, "pageReady hook");
-  await page.evaluate(async () => { await document.fonts.ready; });
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+  });
   if (phase === "capture") {
     if (config.scrollSweep) await scrollSweep(page, config.maxScrollSteps, config.settleMs);
-    await page.evaluate(async ({ timeoutMs, waitForFullPage }) => {
-      const pending = [...document.images].filter((image) => {
-        if (image.complete) return false;
-        if (waitForFullPage) return true;
-        const rect = image.getBoundingClientRect();
-        return rect.bottom >= 0 && rect.top <= window.innerHeight && rect.right >= 0 && rect.left <= window.innerWidth;
-      });
-      if (pending.length) await Promise.race([
-        Promise.all(pending.map((image) => new Promise<void>((resolve) => {
-          image.addEventListener("load", () => resolve(), { once: true });
-          image.addEventListener("error", () => resolve(), { once: true });
-        }))),
-        new Promise<void>((resolve) => window.setTimeout(resolve, timeoutMs)),
-      ]);
-      window.scrollTo(0, 0);
-    }, { timeoutMs: Math.min(config.timeoutMs, 5_000), waitForFullPage: config.screenshot === "full-page" });
+    await page.evaluate(
+      async ({ timeoutMs, waitForFullPage }) => {
+        const pending = [...document.images].filter((image) => {
+          if (image.complete) return false;
+          if (waitForFullPage) return true;
+          const rect = image.getBoundingClientRect();
+          return rect.bottom >= 0 && rect.top <= window.innerHeight && rect.right >= 0 && rect.left <= window.innerWidth;
+        });
+        if (pending.length)
+          await Promise.race([
+            Promise.all(
+              pending.map(
+                (image) =>
+                  new Promise<void>((resolve) => {
+                    image.addEventListener("load", () => resolve(), { once: true });
+                    image.addEventListener("error", () => resolve(), { once: true });
+                  }),
+              ),
+            ),
+            new Promise<void>((resolve) => window.setTimeout(resolve, timeoutMs)),
+          ]);
+        window.scrollTo(0, 0);
+      },
+      { timeoutMs: Math.min(config.timeoutMs, 5_000), waitForFullPage: config.screenshot === "full-page" },
+    );
   }
   await page.waitForTimeout(config.settleMs);
 }
 
 async function scrollSweep(page: Page, maxSteps: number, settleMs: number): Promise<void> {
-  await page.evaluate(async ({ maxSteps, stepDelay }) => {
-    const wait = () => new Promise<void>((resolve) => {
-      window.requestAnimationFrame(() => window.requestAnimationFrame(() => window.setTimeout(resolve, stepDelay)));
-    });
-    const maxY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-    const step = maxY ? Math.max(1, Math.ceil(maxY / maxSteps)) : 1;
-    for (let y = 0; y < maxY; y += step) {
-      window.scrollTo(0, y);
+  await page.evaluate(
+    async ({ maxSteps, stepDelay }) => {
+      const wait = () =>
+        new Promise<void>((resolve) => {
+          window.requestAnimationFrame(() => window.requestAnimationFrame(() => window.setTimeout(resolve, stepDelay)));
+        });
+      const maxY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+      const step = maxY ? Math.max(1, Math.ceil(maxY / maxSteps)) : 1;
+      for (let y = 0; y < maxY; y += step) {
+        window.scrollTo(0, y);
+        await wait();
+      }
+      window.scrollTo(0, maxY);
       await wait();
-    }
-    window.scrollTo(0, maxY);
-    await wait();
-    window.scrollTo(0, 0);
-    await wait();
-  }, { maxSteps, stepDelay: Math.min(50, Math.max(0, settleMs)) });
+      window.scrollTo(0, 0);
+      await wait();
+    },
+    { maxSteps, stepDelay: Math.min(50, Math.max(0, settleMs)) },
+  );
 }
 
 async function withTimeout<T>(operation: Promise<T>, timeoutMs: number, label: string): Promise<T> {
@@ -454,7 +479,9 @@ async function withTimeout<T>(operation: Promise<T>, timeoutMs: number, label: s
   try {
     return await Promise.race([
       operation,
-      new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error(`${label} exceeded ${timeoutMs}ms.`)), timeoutMs); }),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} exceeded ${timeoutMs}ms.`)), timeoutMs);
+      }),
     ]);
   } finally {
     if (timer) clearTimeout(timer);
@@ -468,9 +495,10 @@ async function captureFrame(page: Page, url: string, width: number, config: Reso
   await preparePage(page, url, width, config, "capture");
   assertRequestBudget(budget);
   const probe = await page.evaluate(probePage, { width, maxElements: config.maxElements, maxDomNodes: config.maxDomNodes });
-  const screenshot = config.imageFormat === "jpeg"
-    ? await page.screenshot({ fullPage: config.screenshot === "full-page", type: "jpeg", quality: config.imageQuality, animations: "disabled" })
-    : await page.screenshot({ fullPage: config.screenshot === "full-page", type: "png", animations: "disabled" });
+  const screenshot =
+    config.imageFormat === "jpeg"
+      ? await page.screenshot({ fullPage: config.screenshot === "full-page", type: "jpeg", quality: config.imageQuality, animations: "disabled" })
+      : await page.screenshot({ fullPage: config.screenshot === "full-page", type: "png", animations: "disabled" });
   return {
     width,
     height: config.viewportHeight,
@@ -483,9 +511,17 @@ async function captureFrame(page: Page, url: string, width: number, config: Reso
 }
 
 function probePage(input: { width: number; maxElements: number; maxDomNodes: number }): ProbeResult {
-  type Snap = ElementRef & { element: Element; clientWidth: number; clientHeight: number; scrollWidth: number; scrollHeight: number; overflowX: string; overflowY: string };
+  type Snap = ElementRef & {
+    element: Element;
+    clientWidth: number;
+    clientHeight: number;
+    scrollWidth: number;
+    scrollHeight: number;
+    overflowX: string;
+    overflowY: string;
+  };
   const round = (value: number) => Math.round(value * 10) / 10;
-  const visible = (element: Element, rect: DOMRect, style: CSSStyleDeclaration) =>
+  const visible = (rect: DOMRect, style: CSSStyleDeclaration) =>
     rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden" && Number(style.opacity) !== 0;
   const selectorFor = (element: Element): string => {
     if (element.id) return `#${CSS.escape(element.id)}`;
@@ -511,7 +547,14 @@ function probePage(input: { width: number; maxElements: number; maxDomNodes: num
     ...(snap.text ? { text: snap.text } : {}),
     rect: snap.rect,
   });
-  const issue = (kind: ResponsiveIssue["kind"], severity: ResponsiveIssue["severity"], message: string, elements: ElementRef[], suffix: string, metrics?: Record<string, number>): ResponsiveIssue => ({
+  const issue = (
+    kind: ResponsiveIssue["kind"],
+    severity: ResponsiveIssue["severity"],
+    message: string,
+    elements: ElementRef[],
+    suffix: string,
+    metrics?: Record<string, number>,
+  ): ResponsiveIssue => ({
     id: `${kind}-${input.width}-${suffix}`,
     kind,
     severity,
@@ -528,7 +571,7 @@ function probePage(input: { width: number; maxElements: number; maxDomNodes: num
     if (element.closest("[data-widthwatch-ignore]")) continue;
     const rect = element.getBoundingClientRect();
     const style = getComputedStyle(element);
-    if (!visible(element, rect, style)) continue;
+    if (!visible(rect, style)) continue;
     const text = (element.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 90);
     snaps.push({
       element,
@@ -549,24 +592,39 @@ function probePage(input: { width: number; maxElements: number; maxDomNodes: num
   const documentWidth = Math.max(document.documentElement.scrollWidth, document.body?.scrollWidth ?? 0);
   const documentHeight = Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0);
   if (documentWidth > input.width + 1) {
-    issues.push(issue("document-overflow", "error", `The document is ${documentWidth - input.width}px wider than the viewport.`, [], "document", { overflowPx: documentWidth - input.width }));
+    issues.push(
+      issue("document-overflow", "error", `The document is ${documentWidth - input.width}px wider than the viewport.`, [], "document", {
+        overflowPx: documentWidth - input.width,
+      }),
+    );
   }
 
   for (const snap of snaps) {
     const right = snap.rect.x + snap.rect.width;
     const meaningfulLeaf = snap.element.matches("h1,h2,h3,h4,h5,h6,p,li,a,button,input,select,textarea,img") && !snap.element.closest("[aria-hidden=true]");
     if (meaningfulLeaf && right > input.width + 2 && snap.rect.x < input.width) {
-      issues.push(issue("element-overflow", "warning", "Element crosses the right viewport edge.", [ref(snap)], snap.selector, { overflowPx: round(right - input.width) }));
+      issues.push(
+        issue("element-overflow", "warning", "Element crosses the right viewport edge.", [ref(snap)], snap.selector, {
+          overflowPx: round(right - input.width),
+        }),
+      );
     }
     const hasText = Boolean(snap.text) && snap.element.children.length === 0;
     const clippedX = snap.scrollWidth > snap.clientWidth + 1 && ["hidden", "clip"].includes(snap.overflowX);
     const clippedY = snap.scrollHeight > snap.clientHeight + 1 && ["hidden", "clip"].includes(snap.overflowY);
     if (hasText && (clippedX || clippedY)) {
-      issues.push(issue("clipped-text", "error", "Rendered text is clipped by its box.", [ref(snap)], snap.selector, { hiddenWidth: Math.max(0, snap.scrollWidth - snap.clientWidth), hiddenHeight: Math.max(0, snap.scrollHeight - snap.clientHeight) }));
+      issues.push(
+        issue("clipped-text", "error", "Rendered text is clipped by its box.", [ref(snap)], snap.selector, {
+          hiddenWidth: Math.max(0, snap.scrollWidth - snap.clientWidth),
+          hiddenHeight: Math.max(0, snap.scrollHeight - snap.clientHeight),
+        }),
+      );
     }
   }
 
-  const overlapCandidates = snaps.filter((snap) => snap.element.children.length === 0 && (snap.text || snap.element.matches("img,svg,button,input,select,textarea,a"))).slice(0, 180);
+  const overlapCandidates = snaps
+    .filter((snap) => snap.element.children.length === 0 && (snap.text || snap.element.matches("img,svg,button,input,select,textarea,a")))
+    .slice(0, 180);
   let overlapCount = 0;
   for (let a = 0; a < overlapCandidates.length && overlapCount < 25; a += 1) {
     for (let b = a + 1; b < overlapCandidates.length && overlapCount < 25; b += 1) {
@@ -580,12 +638,22 @@ function probePage(input: { width: number; maxElements: number; maxDomNodes: num
       const smaller = Math.min(first.rect.width * first.rect.height, second.rect.width * second.rect.height);
       const ratio = smaller ? intersection / smaller : 0;
       if (ratio < 0.18) continue;
-      issues.push(issue("overlap", ratio > 0.55 ? "error" : "warning", "Visible leaf elements overlap.", [ref(first), ref(second)], `${a}-${b}`, { overlapRatio: round(ratio) }));
+      issues.push(
+        issue("overlap", ratio > 0.55 ? "error" : "warning", "Visible leaf elements overlap.", [ref(first), ref(second)], `${a}-${b}`, {
+          overlapRatio: round(ratio),
+        }),
+      );
       overlapCount += 1;
     }
   }
 
-  const signatureSource = snaps.slice(0, 120).map((snap) => `${snap.selector}:${Math.round(snap.rect.x / input.width * 20)},${Math.round(snap.rect.y / 8)},${Math.round(snap.rect.width / input.width * 20)},${Math.round(snap.rect.height / 8)}`).join("|");
+  const signatureSource = snaps
+    .slice(0, 120)
+    .map(
+      (snap) =>
+        `${snap.selector}:${Math.round((snap.rect.x / input.width) * 20)},${Math.round(snap.rect.y / 8)},${Math.round((snap.rect.width / input.width) * 20)},${Math.round(snap.rect.height / 8)}`,
+    )
+    .join("|");
   let hash = 2166136261;
   for (let index = 0; index < signatureSource.length; index += 1) hash = Math.imul(hash ^ signatureSource.charCodeAt(index), 16777619);
   return { document: { width: documentWidth, height: documentHeight }, signature: (hash >>> 0).toString(36), issues };
@@ -611,7 +679,12 @@ function buildTransitions(frames: FrameSignal[]): WidthTransition[] {
   return frames.slice(0, -1).map((frame, index) => {
     const next = frames[index + 1]!;
     const score = transitionScore(frame, next);
-    return { from: frame.width, to: next.width, changed: frame.layoutSignature !== next.layoutSignature || issueFingerprint(frame) !== issueFingerprint(next), score: Math.round(score * 10) / 10 };
+    return {
+      from: frame.width,
+      to: next.width,
+      changed: frame.layoutSignature !== next.layoutSignature || issueFingerprint(frame) !== issueFingerprint(next),
+      score: Math.round(score * 10) / 10,
+    };
   });
 }
 
@@ -648,41 +721,70 @@ function validateOptions(config: ResolvedScanOptions): void {
   if (!(["layout", "visual"] as const).includes(config.mode)) throw new Error("mode must be layout or visual.");
   if (!(["viewport", "full-page"] as const).includes(config.screenshot)) throw new Error("screenshot must be viewport or full-page.");
   if (!(["png", "jpeg"] as const).includes(config.imageFormat)) throw new Error("imageFormat must be png or jpeg.");
-  if (!finiteInteger(config.imageQuality) || config.imageQuality < 1 || config.imageQuality > 100) throw new Error("imageQuality must be a whole number between 1 and 100.");
-  if (typeof config.scrollSweep !== "boolean" || typeof config.reloadPerWidth !== "boolean" || typeof config.headless !== "boolean") throw new Error("scrollSweep, reloadPerWidth and headless must be booleans.");
+  if (!finiteInteger(config.imageQuality) || config.imageQuality < 1 || config.imageQuality > 100)
+    throw new Error("imageQuality must be a whole number between 1 and 100.");
+  if (typeof config.scrollSweep !== "boolean" || typeof config.reloadPerWidth !== "boolean" || typeof config.headless !== "boolean")
+    throw new Error("scrollSweep, reloadPerWidth and headless must be booleans.");
   if (config.pageReady !== undefined && typeof config.pageReady !== "function") throw new Error("pageReady must be a function.");
-  if (config.pageReady && (typeof config.readinessKey !== "string" || !config.readinessKey.trim())) throw new Error("readinessKey is required when pageReady is configured.");
+  if (config.pageReady && (typeof config.readinessKey !== "string" || !config.readinessKey.trim()))
+    throw new Error("readinessKey is required when pageReady is configured.");
   if (!config.pageReady && config.readinessKey !== undefined) throw new Error("readinessKey requires pageReady.");
-  if (!Array.isArray(config.hideSelectors) || config.hideSelectors.some((selector) => typeof selector !== "string")) throw new Error("hideSelectors must be an array of strings.");
-  if (!Array.isArray(config.blockResourceTypes) || config.blockResourceTypes.some((type) => typeof type !== "string")) throw new Error("blockResourceTypes must be an array of strings.");
-  if (!finiteInteger(config.minWidth) || !finiteInteger(config.maxWidth) || config.minWidth < 240 || config.maxWidth > 3840 || (config.exactWidths ? config.minWidth > config.maxWidth : config.minWidth >= config.maxWidth)) throw new Error("Width range must use whole pixels between 240px and 3840px.");
-  if (!finiteInteger(config.viewportHeight) || config.viewportHeight < 240 || config.viewportHeight > 4320) throw new Error("viewportHeight must be a whole number between 240 and 4320.");
-  if (!finiteInteger(config.initialStep) || config.initialStep < 1 || config.initialStep > 3840) throw new Error("initialStep must be a whole number between 1 and 3840.");
+  if (!Array.isArray(config.hideSelectors) || config.hideSelectors.some((selector) => typeof selector !== "string"))
+    throw new Error("hideSelectors must be an array of strings.");
+  if (!Array.isArray(config.blockResourceTypes) || config.blockResourceTypes.some((type) => typeof type !== "string"))
+    throw new Error("blockResourceTypes must be an array of strings.");
+  if (
+    !finiteInteger(config.minWidth) ||
+    !finiteInteger(config.maxWidth) ||
+    config.minWidth < 240 ||
+    config.maxWidth > 3840 ||
+    (config.exactWidths ? config.minWidth > config.maxWidth : config.minWidth >= config.maxWidth)
+  )
+    throw new Error("Width range must use whole pixels between 240px and 3840px.");
+  if (!finiteInteger(config.viewportHeight) || config.viewportHeight < 240 || config.viewportHeight > 4320)
+    throw new Error("viewportHeight must be a whole number between 240 and 4320.");
+  if (!finiteInteger(config.initialStep) || config.initialStep < 1 || config.initialStep > 3840)
+    throw new Error("initialStep must be a whole number between 1 and 3840.");
   if (!finiteInteger(config.minStep) || config.minStep < 1 || config.minStep > 3840) throw new Error("minStep must be a whole number between 1 and 3840.");
-  if (!finiteInteger(config.maxSamples) || config.maxSamples < 2 || config.maxSamples > 100) throw new Error("maxSamples must be a whole number between 2 and 100.");
-  if (!finiteInteger(config.maxCaptureSamples) || config.maxCaptureSamples < 2 || config.maxCaptureSamples > 100) throw new Error("maxCaptureSamples must be a whole number between 2 and 100.");
-  if (!finiteInteger(config.maxElements) || config.maxElements < 1 || config.maxElements > 10_000) throw new Error("maxElements must be a whole number between 1 and 10000.");
-  if (!finiteInteger(config.maxDomNodes) || config.maxDomNodes < config.maxElements || config.maxDomNodes > 100_000) throw new Error("maxDomNodes must be a whole number between maxElements and 100000.");
-  if (!finiteInteger(config.timeoutMs) || config.timeoutMs < 1 || config.timeoutMs > 300_000) throw new Error("timeoutMs must be a whole number between 1 and 300000.");
-  if (!finiteInteger(config.settleMs) || config.settleMs < 0 || config.settleMs > 30_000) throw new Error("settleMs must be a whole number between 0 and 30000.");
-  if (!finiteInteger(config.maxScrollSteps) || config.maxScrollSteps < 1 || config.maxScrollSteps > 100) throw new Error("maxScrollSteps must be a whole number between 1 and 100.");
-  if (!finiteInteger(config.pageReadyTimeoutMs) || config.pageReadyTimeoutMs < 1 || config.pageReadyTimeoutMs > 300_000) throw new Error("pageReadyTimeoutMs must be a whole number between 1 and 300000.");
-  if (!finiteInteger(config.maxRequestsPerNavigation) || config.maxRequestsPerNavigation < 1 || config.maxRequestsPerNavigation > 10_000) throw new Error("maxRequestsPerNavigation must be a whole number between 1 and 10000.");
-  if (!finiteInteger(config.maxTotalRequests) || config.maxTotalRequests < 1 || config.maxTotalRequests > 100_000) throw new Error("maxTotalRequests must be a whole number between 1 and 100000.");
+  if (!finiteInteger(config.maxSamples) || config.maxSamples < 2 || config.maxSamples > 100)
+    throw new Error("maxSamples must be a whole number between 2 and 100.");
+  if (!finiteInteger(config.maxCaptureSamples) || config.maxCaptureSamples < 2 || config.maxCaptureSamples > 100)
+    throw new Error("maxCaptureSamples must be a whole number between 2 and 100.");
+  if (!finiteInteger(config.maxElements) || config.maxElements < 1 || config.maxElements > 10_000)
+    throw new Error("maxElements must be a whole number between 1 and 10000.");
+  if (!finiteInteger(config.maxDomNodes) || config.maxDomNodes < config.maxElements || config.maxDomNodes > 100_000)
+    throw new Error("maxDomNodes must be a whole number between maxElements and 100000.");
+  if (!finiteInteger(config.timeoutMs) || config.timeoutMs < 1 || config.timeoutMs > 300_000)
+    throw new Error("timeoutMs must be a whole number between 1 and 300000.");
+  if (!finiteInteger(config.settleMs) || config.settleMs < 0 || config.settleMs > 30_000)
+    throw new Error("settleMs must be a whole number between 0 and 30000.");
+  if (!finiteInteger(config.maxScrollSteps) || config.maxScrollSteps < 1 || config.maxScrollSteps > 100)
+    throw new Error("maxScrollSteps must be a whole number between 1 and 100.");
+  if (!finiteInteger(config.pageReadyTimeoutMs) || config.pageReadyTimeoutMs < 1 || config.pageReadyTimeoutMs > 300_000)
+    throw new Error("pageReadyTimeoutMs must be a whole number between 1 and 300000.");
+  if (!finiteInteger(config.maxRequestsPerNavigation) || config.maxRequestsPerNavigation < 1 || config.maxRequestsPerNavigation > 10_000)
+    throw new Error("maxRequestsPerNavigation must be a whole number between 1 and 10000.");
+  if (!finiteInteger(config.maxTotalRequests) || config.maxTotalRequests < 1 || config.maxTotalRequests > 100_000)
+    throw new Error("maxTotalRequests must be a whole number between 1 and 100000.");
   if (config.exactWidths) {
     if (config.exactWidths.length < 1 || config.exactWidths.length > 100) throw new Error("exactWidths must contain between 1 and 100 widths.");
-    if (config.exactWidths.some((width) => !finiteInteger(width) || width < 240 || width > 3840)) throw new Error("exactWidths must contain whole pixels between 240 and 3840.");
+    if (config.exactWidths.some((width) => !finiteInteger(width) || width < 240 || width > 3840))
+      throw new Error("exactWidths must contain whole pixels between 240 and 3840.");
     if (new Set(config.exactWidths).size !== config.exactWidths.length) throw new Error("exactWidths must not contain duplicates.");
-    if (config.exactWidths.some((width) => width < config.minWidth || width > config.maxWidth)) throw new Error("exactWidths must stay inside the configured width range.");
+    if (config.exactWidths.some((width) => width < config.minWidth || width > config.maxWidth))
+      throw new Error("exactWidths must stay inside the configured width range.");
     config.exactWidths.sort((a, b) => a - b);
   }
   if (config.probeWidths) {
     if (!config.exactWidths) throw new Error("probeWidths requires exactWidths.");
     if (config.probeWidths.length < 1 || config.probeWidths.length > 100) throw new Error("probeWidths must contain between 1 and 100 widths.");
-    if (config.probeWidths.some((width) => !finiteInteger(width) || width < 240 || width > 3840)) throw new Error("probeWidths must contain whole pixels between 240 and 3840.");
+    if (config.probeWidths.some((width) => !finiteInteger(width) || width < 240 || width > 3840))
+      throw new Error("probeWidths must contain whole pixels between 240 and 3840.");
     if (new Set(config.probeWidths).size !== config.probeWidths.length) throw new Error("probeWidths must not contain duplicates.");
-    if (config.probeWidths.some((width) => width < config.minWidth || width > config.maxWidth)) throw new Error("probeWidths must stay inside the configured width range.");
-    if (config.exactWidths.some((width) => !config.probeWidths!.includes(width))) throw new Error("exactWidths must be a subset of probeWidths when both schedules are configured.");
+    if (config.probeWidths.some((width) => width < config.minWidth || width > config.maxWidth))
+      throw new Error("probeWidths must stay inside the configured width range.");
+    if (config.exactWidths.some((width) => !config.probeWidths!.includes(width)))
+      throw new Error("exactWidths must be a subset of probeWidths when both schedules are configured.");
     config.probeWidths.sort((a, b) => a - b);
   }
 }

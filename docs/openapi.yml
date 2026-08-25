@@ -1,5 +1,5 @@
 openapi: 3.1.0
-info: { title: WidthWatch hosted scanner, version: 0.4.1 }
+info: { title: WidthWatch hosted scanner, version: 0.4.2 }
 servers: [{ url: "https://api.example.com" }]
 paths:
   /health:

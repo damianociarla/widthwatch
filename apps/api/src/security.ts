@@ -1,13 +1,17 @@
 export class SlidingWindowLimiter {
   private readonly buckets = new Map<string, number[]>();
-  constructor(private readonly limit: number, private readonly windowMs: number) {}
+  constructor(
+    private readonly limit: number,
+    private readonly windowMs: number,
+  ) {}
   canConsume(key: string, now = Date.now()): boolean {
     const recent = (this.buckets.get(key) ?? []).filter((value) => now - value < this.windowMs);
     return recent.length < this.limit;
   }
   commit(key: string, now = Date.now()): void {
     const recent = (this.buckets.get(key) ?? []).filter((value) => now - value < this.windowMs);
-    recent.push(now); this.buckets.set(key, recent);
+    recent.push(now);
+    this.buckets.set(key, recent);
     if (this.buckets.size > 10_000) this.buckets.clear();
   }
 }
