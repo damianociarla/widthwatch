@@ -1,7 +1,7 @@
 {
   "name": "widthwatch-monorepo",
   "private": true,
-  "version": "0.4.2",
+  "version": "0.4.3",
   "type": "module",
   "workspaces": [
     "apps/*",
@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "coverage": "npm run coverage --workspace widthwatch",
+    "coverage": "npm run coverage --workspaces --if-present",
     "format": "biome format --write .",
     "format:check": "biome format .",
     "lint": "biome lint . --error-on-warnings",

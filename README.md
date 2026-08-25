@@ -114,6 +114,8 @@ npm run coverage
 npm run dev
 ```
 
+Coverage gates run per workspace. The hosted API additionally enforces focused thresholds for HTTP admission, public-target policy and pinned egress; the web client is measured in Chromium against its original TypeScript source.
+
 Run the API separately:
 
 ```bash

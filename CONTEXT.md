@@ -23,3 +23,7 @@ A comparison of the same finding occurrence across baseline and candidate. Highe
 ## Report schedule
 
 The pair of ordered width schedules used by a report: all probe widths and the evidence subset. CI reproduces both schedules and fails closed when either differs.
+
+## HTTP admission
+
+The request lifecycle that accepts a hosted public scan. HTTP admission owns JSON limits, origin verification, CORS, public-target policy, capacity, rate limits, queue state and status semantics; it delegates responsive scanning and report persistence to adapters.

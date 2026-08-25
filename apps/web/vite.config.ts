@@ -7,6 +7,7 @@ const root = fileURLToPath(new URL(".", import.meta.url));
 export default defineConfig({
   base: "/widthwatch/",
   build: {
+    sourcemap: process.env.VITE_COVERAGE === "true" ? "hidden" : false,
     rollupOptions: {
       input: {
         main: resolve(root, "index.html"),

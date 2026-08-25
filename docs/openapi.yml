@@ -1,6 +1,8 @@
 openapi: 3.1.0
-info: { title: WidthWatch hosted scanner, version: 0.4.2 }
-servers: [{ url: "https://api.example.com" }]
+info: { title: WidthWatch hosted scanner, version: 0.4.3 }
+servers:
+  - url: "https://d35vhnded4ly3z.cloudfront.net"
+    description: Bounded public scanner through CloudFront and AWS WAF
 paths:
   /health:
     get:
@@ -20,7 +22,8 @@ paths:
               properties: { url: { type: string, format: uri, maxLength: 2000 } }
       responses:
         "202": { description: Accepted; the connection may remain open briefly so App Runner keeps CPU allocated while the bounded scan runs }
-        "400": { description: Invalid or unsafe URL }
+        "400": { description: Invalid JSON, invalid URL shape, or unsafe public target }
+        "413": { description: JSON body exceeds the 2048-byte admission limit }
         "429": { description: Client, target, or global quota reached }
         "503": { description: Hard capacity limit reached }
   /v1/scans/{id}:
@@ -39,3 +42,4 @@ paths:
           description: Interactive standalone HTML report
           content: { text/html: { schema: { type: string } } }
         "404": { description: Unknown, incomplete, or report older than the seven-day public retention window }
+        "503": { description: Persistent report storage is temporarily unavailable }

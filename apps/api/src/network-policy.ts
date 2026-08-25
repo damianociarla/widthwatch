@@ -1,6 +1,8 @@
 import { lookup } from "node:dns/promises";
 import ipaddr from "ipaddr.js";
 
+export type PublicTargetLookup = (hostname: string) => Promise<Array<{ address: string }>>;
+
 const blockedHosts = new Set(["localhost", "metadata.google.internal", "instance-data.ec2.internal", "169.254.169.254", "fd00:ec2::254"]);
 const blockedSuffixes = [".localhost", ".local", ".internal", ".home.arpa"];
 
@@ -11,7 +13,7 @@ export class UnsafeUrlError extends Error {
   }
 }
 
-export async function resolvePublicTarget(value: string): Promise<{ url: URL; addresses: string[] }> {
+export async function resolvePublicTarget(value: string, resolveHost: PublicTargetLookup = systemLookup): Promise<{ url: URL; addresses: string[] }> {
   let url: URL;
   try {
     url = new URL(value);
@@ -27,7 +29,7 @@ export async function resolvePublicTarget(value: string): Promise<{ url: URL; ad
   if (!hostname || blockedHosts.has(hostname) || blockedSuffixes.some((suffix) => hostname.endsWith(suffix))) throw new UnsafeUrlError();
   const addresses = ipaddr.isValid(hostname)
     ? [hostname]
-    : await lookup(hostname, { all: true, verbatim: true }).then(
+    : await resolveHost(hostname).then(
         (items) => items.map((item) => item.address),
         () => [],
       );
@@ -35,9 +37,9 @@ export async function resolvePublicTarget(value: string): Promise<{ url: URL; ad
   return { url, addresses };
 }
 
-export async function assertPublicUrl(value: string): Promise<URL> {
+export async function assertPublicUrl(value: string, resolveHost?: PublicTargetLookup): Promise<URL> {
   const normalized = /^https?:\/\//i.test(value) ? value : `https://${value}`;
-  return (await resolvePublicTarget(normalized)).url;
+  return (await resolvePublicTarget(normalized, resolveHost)).url;
 }
 
 export function isPublicAddress(value: string): boolean {
@@ -48,4 +50,8 @@ export function isPublicAddress(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function systemLookup(hostname: string): Promise<Array<{ address: string }>> {
+  return lookup(hostname, { all: true, verbatim: true });
 }

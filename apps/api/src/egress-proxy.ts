@@ -3,13 +3,15 @@ import { connect, type Socket } from "node:net";
 import type { Duplex } from "node:stream";
 import { resolvePublicTarget, UnsafeUrlError } from "./network-policy.js";
 
-export async function startPinnedEgressProxy(): Promise<{ url: string; close(): Promise<void> }> {
+export type EgressTargetResolver = (value: string) => ReturnType<typeof resolvePublicTarget>;
+
+export async function startPinnedEgressProxy(resolveTarget: EgressTargetResolver = resolvePublicTarget): Promise<{ url: string; close(): Promise<void> }> {
   const sockets = new Set<Socket>();
   const server = createServer((request, response) => {
-    void proxyHttp(request, response);
+    void proxyHttp(request, response, resolveTarget);
   });
   server.on("connect", (request, socket, head) => {
-    void proxyTunnel(request.url ?? "", socket, head);
+    void proxyTunnel(request.url ?? "", socket, head, resolveTarget);
   });
   server.on("upgrade", (_request, socket) => socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n"));
   server.on("connection", (socket) => {
@@ -32,10 +34,10 @@ export async function startPinnedEgressProxy(): Promise<{ url: string; close(): 
   };
 }
 
-async function proxyHttp(request: IncomingMessage, response: ServerResponse): Promise<void> {
+async function proxyHttp(request: IncomingMessage, response: ServerResponse, resolveTarget: EgressTargetResolver): Promise<void> {
   try {
     if (!request.url) throw new UnsafeUrlError();
-    const target = await resolvePublicTarget(request.url);
+    const target = await resolveTarget(request.url);
     if (target.url.protocol !== "http:") throw new UnsafeUrlError();
     const socket = await connectPinned(target.addresses, Number(target.url.port || 80));
     const agent = new Agent({ keepAlive: false });
@@ -58,11 +60,11 @@ async function proxyHttp(request: IncomingMessage, response: ServerResponse): Pr
   }
 }
 
-async function proxyTunnel(authority: string, client: Duplex, head: Buffer): Promise<void> {
+async function proxyTunnel(authority: string, client: Duplex, head: Buffer, resolveTarget: EgressTargetResolver): Promise<void> {
   try {
     const url = new URL(`https://${authority}`);
     if (Number(url.port || 443) !== 443 || url.username || url.password || url.pathname !== "/") throw new UnsafeUrlError();
-    const target = await resolvePublicTarget(url.toString());
+    const target = await resolveTarget(url.toString());
     const upstream = await connectPinned(target.addresses, 443);
     client.write("HTTP/1.1 200 Connection Established\r\n\r\n");
     if (head.length) upstream.write(head);

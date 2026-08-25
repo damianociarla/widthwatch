@@ -1,6 +1,6 @@
 {
   "name": "widthwatch",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Continuous responsive visual regression testing with adaptive viewport discovery",
   "type": "module",
   "license": "MIT",
@@ -39,7 +39,10 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "coverage": "npm run build && node --test --experimental-test-coverage --test-coverage-lines=78 --test-coverage-branches=78 --test-coverage-functions=85 --test-coverage-include='dist/**/*.js' test/*.test.mjs",
+    "coverage": "npm run build && npm run coverage:all && npm run coverage:config && npm run coverage:cli",
+    "coverage:all": "node --test --experimental-test-coverage --test-coverage-lines=78 --test-coverage-branches=78 --test-coverage-functions=85 --test-coverage-include='dist/**/*.js' test/*.test.mjs",
+    "coverage:config": "node --test --experimental-test-coverage --test-coverage-lines=90 --test-coverage-branches=90 --test-coverage-functions=90 --test-coverage-include='dist/config.js' test/config.test.mjs",
+    "coverage:cli": "node --test --experimental-test-coverage --test-coverage-lines=55 --test-coverage-branches=15 --test-coverage-functions=60 --test-coverage-include='dist/cli.js' test/cli-options.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node --test test/*.test.mjs"
   },

@@ -1,5 +1,13 @@
 # Migration notes
 
+## v0.4.3
+
+This patch hardens the hosted HTTP admission path without changing report schema, sampling protocol or capture protocol. Existing baselines compatible with v0.4.0–v0.4.2 remain compatible with v0.4.3.
+
+Empty or malformed JSON now returns `400 invalid_json`, valid JSON with an invalid URL shape returns `400 invalid_url`, and request bodies above 2048 bytes return `413 payload_too_large`. HTTP admission is now instantiable without process startup and is tested through real ephemeral HTTP listeners. DNS policy and pinned egress use injected test adapters, while production retains system DNS and the same SSRF policy.
+
+Coverage is enforced independently for the engine, hosted API, critical HTTP/network/egress modules, and the browser-executed web client. The OpenAPI server now identifies the bounded public CloudFront endpoint.
+
 ## v0.4.2
 
 This patch improves the public product surface and repository quality gates without changing report schema, sampling protocol or capture protocol. Existing baselines compatible with v0.4.0 and v0.4.1 remain compatible with v0.4.2.

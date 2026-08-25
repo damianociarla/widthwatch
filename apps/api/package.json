@@ -1,10 +1,15 @@
 {
   "name": "@widthwatch/api",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "coverage": "npm run build && npm run coverage:all && npm run coverage:http && npm run coverage:network && npm run coverage:egress",
+    "coverage:all": "node --test --experimental-test-coverage --test-coverage-lines=90 --test-coverage-branches=80 --test-coverage-functions=80 --test-coverage-exclude='dist/server.js' --test-coverage-include='dist/**/*.js' test/*.test.mjs",
+    "coverage:http": "node --test --experimental-test-coverage --test-coverage-lines=90 --test-coverage-branches=85 --test-coverage-functions=85 --test-coverage-include='dist/http-admission.js' test/http-admission.test.mjs",
+    "coverage:network": "node --test --experimental-test-coverage --test-coverage-lines=90 --test-coverage-branches=90 --test-coverage-functions=90 --test-coverage-include='dist/network-policy.js' test/network-policy.test.mjs",
+    "coverage:egress": "node --test --experimental-test-coverage --test-coverage-lines=80 --test-coverage-branches=55 --test-coverage-functions=65 --test-coverage-include='dist/egress-proxy.js' test/egress-proxy.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node --test test/*.test.mjs",
     "start": "node dist/server.js"
