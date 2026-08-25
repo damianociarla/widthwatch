@@ -1,6 +1,6 @@
-import { chromium, type BrowserContext, type Page } from "playwright";
+import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import type { ElementRef, LayoutFrame, ResponsiveIssue, ScanOptions, WidthTransition, WidthWatchReport } from "./types.js";
-import { PACKAGE_VERSION } from "./version.js";
+import { CAPTURE_PROTOCOL_VERSION, PACKAGE_VERSION } from "./version.js";
 import { groupIssuesByRange } from "./issue-ranges.js";
 
 interface ProbeResult {
@@ -8,6 +8,8 @@ interface ProbeResult {
   signature: string;
   issues: ResponsiveIssue[];
 }
+
+type FrameSignal = Pick<LayoutFrame, "width" | "height" | "document" | "layoutSignature" | "issues" | "durationMs">;
 
 interface ResolvedScanOptions {
   mode: "layout" | "visual";
@@ -18,6 +20,7 @@ interface ResolvedScanOptions {
   initialStep: number;
   minStep: number;
   maxSamples: number;
+  maxCaptureSamples: number;
   maxElements: number;
   maxDomNodes: number;
   timeoutMs: number;
@@ -48,6 +51,7 @@ const defaults: Omit<ResolvedScanOptions, "allowedUrl" | "exactWidths" | "pageRe
   initialStep: 160,
   minStep: 8,
   maxSamples: 24,
+  maxCaptureSamples: 8,
   maxElements: 500,
   maxDomNodes: 10_000,
   timeoutMs: 30_000,
@@ -88,6 +92,10 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
     proxyServer: options.proxyServer,
     maxRequestsPerNavigation: options.maxRequestsPerNavigation ?? options.maxRequests ?? defaults.maxRequestsPerNavigation,
     maxTotalRequests: options.maxTotalRequests ?? options.maxRequests ?? defaults.maxTotalRequests,
+    maxCaptureSamples: Math.min(
+      options.maxCaptureSamples ?? defaults.maxCaptureSamples,
+      options.maxSamples ?? defaults.maxSamples,
+    ),
   };
   validateOptions(config);
   const normalizedUrl = normalizeUrl(url);
@@ -97,50 +105,40 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
   const browser = await chromium.launch({ headless: config.headless, ...(config.proxyServer ? { proxy: { server: config.proxyServer } } : {}) });
   let context: BrowserContext | undefined;
   try {
-    context = await browser.newContext({
-      viewport: { width: config.minWidth, height: config.viewportHeight },
-      reducedMotion: "reduce",
-      colorScheme: "light",
-      deviceScaleFactor: 1,
-      locale: "en-US",
-      timezoneId: "UTC",
-      serviceWorkers: "block",
-    });
-    const requestBudget = await installNetworkPolicy(context, config);
-    const page = await context.newPage();
+    const requestBudget: RequestBudget = { perNavigation: 0, total: 0 };
+    context = await createScanContext(browser, config, requestBudget);
+    let page = await context.newPage();
     if (!config.reloadPerWidth) await navigate(page, normalizedUrl, config, requestBudget);
 
-    const frames = new Map<number, LayoutFrame>();
-    const refinementsByBand = new Map<number, number>();
-    const initialWidths = config.exactWidths ?? seedWidths(config.minWidth, config.maxWidth, config.initialStep);
-    for (const width of initialWidths) {
-      if (!config.exactWidths && frames.size >= config.maxSamples) break;
-      frames.set(width, await captureFrame(page, normalizedUrl, width, config, requestBudget));
-    }
-
-    while (!config.exactWidths && frames.size < config.maxSamples) {
-      const widths = [...frames.keys()].sort((a, b) => a - b);
-      const candidates: Array<{ width: number; priority: number; band: number; span: number }> = [];
-      for (let index = 0; index < widths.length - 1; index += 1) {
-        const leftWidth = widths[index];
-        const rightWidth = widths[index + 1];
-        if (leftWidth === undefined || rightWidth === undefined || rightWidth - leftWidth <= config.minStep) continue;
-        const left = frames.get(leftWidth)!;
-        const right = frames.get(rightWidth)!;
-        const changed = left.layoutSignature !== right.layoutSignature || issueFingerprint(left) !== issueFingerprint(right);
-        if (changed) {
-          const width = Math.floor((leftWidth + rightWidth) / 2);
-          const band = Math.min(Math.floor((width - config.minWidth) / config.initialStep), Math.floor((config.maxWidth - config.minWidth) / config.initialStep));
-          const refinements = refinementsByBand.get(band) ?? 0;
-          const span = rightWidth - leftWidth;
-          const priority = transitionScore(left, right) / (1 + refinements) + Math.min(6, span / config.initialStep * 3);
-          candidates.push({ width, priority, band, span });
-        }
-      }
-      const next = candidates.sort((a, b) => b.priority - a.priority || b.span - a.span || a.width - b.width)[0];
-      if (!next || frames.has(next.width)) break;
-      frames.set(next.width, await captureFrame(page, normalizedUrl, next.width, config, requestBudget));
-      refinementsByBand.set(next.band, (refinementsByBand.get(next.band) ?? 0) + 1);
+    let frames: Map<number, LayoutFrame>;
+    let discoveryWidths: number[];
+    let samplingStrategy: NonNullable<WidthWatchReport["sampling"]>["strategy"];
+    if (config.exactWidths) {
+      frames = new Map();
+      for (const width of config.exactWidths) frames.set(width, await captureFrame(page, normalizedUrl, width, config, requestBudget));
+      discoveryWidths = [];
+      samplingStrategy = "exact";
+    } else if (config.mode === "visual") {
+      const discovered = await sampleAdaptiveFrames(
+        (width) => probeDiscoveryFrame(page, normalizedUrl, width, config, requestBudget),
+        config,
+      );
+      discoveryWidths = [...discovered.keys()].sort((a, b) => a - b);
+      const captureWidths = selectVisualCaptureWidths(discovered, config.maxCaptureSamples);
+      await context.close();
+      context = await createScanContext(browser, config, requestBudget);
+      page = await context.newPage();
+      if (!config.reloadPerWidth) await navigate(page, normalizedUrl, config, requestBudget);
+      frames = new Map();
+      for (const width of captureWidths) frames.set(width, await captureFrame(page, normalizedUrl, width, config, requestBudget));
+      samplingStrategy = "adaptive-two-pass";
+    } else {
+      frames = await sampleAdaptiveFrames(
+        (width) => captureFrame(page, normalizedUrl, width, config, requestBudget),
+        config,
+      );
+      discoveryWidths = [...frames.keys()].sort((a, b) => a - b);
+      samplingStrategy = "adaptive-single-pass";
     }
 
     const orderedFrames = [...frames.values()].sort((a, b) => a.width - b.width);
@@ -156,7 +154,7 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
       range: { min: config.minWidth, max: config.maxWidth, height: config.viewportHeight },
       environment: { browser: `Chromium ${browser.version()}`, platform: process.platform, packageVersion: PACKAGE_VERSION },
       capture: {
-        protocolVersion: 1,
+        protocolVersion: CAPTURE_PROTOCOL_VERSION,
         mode: config.mode,
         screenshot: config.screenshot,
         imageFormat: config.imageFormat,
@@ -173,6 +171,12 @@ export async function scanResponsive(url: string, options: ScanOptions = {}): Pr
         timezoneId: "UTC",
         pageReady: Boolean(config.pageReady),
         readinessKey: config.readinessKey ?? null,
+      },
+      sampling: {
+        protocolVersion: 1,
+        strategy: samplingStrategy,
+        discoveryWidths,
+        capturedWidths: orderedFrames.map((frame) => frame.width),
       },
       frames: orderedFrames,
       transitions,
@@ -194,14 +198,111 @@ export function scanAtWidths(url: string, widths: number[], options: Omit<ScanOp
   return scanResponsive(url, { ...options, exactWidths: widths });
 }
 
+async function sampleAdaptiveFrames<T extends FrameSignal>(
+  sample: (width: number) => Promise<T>,
+  config: ResolvedScanOptions,
+): Promise<Map<number, T>> {
+  const frames = new Map<number, T>();
+  const refinementsByBand = new Map<number, number>();
+  const seeds = seedWidths(config.minWidth, config.maxWidth, config.initialStep);
+  const initialWidths = seeds.length <= config.maxSamples
+    ? seeds
+    : Array.from({ length: config.maxSamples }, (_, index) => seeds[Math.round(index * (seeds.length - 1) / (config.maxSamples - 1))]!);
+  for (const width of new Set(initialWidths)) frames.set(width, await sample(width));
+
+  while (frames.size < config.maxSamples) {
+    const widths = [...frames.keys()].sort((a, b) => a - b);
+    const candidates: Array<{ width: number; priority: number; band: number; span: number }> = [];
+    for (let index = 0; index < widths.length - 1; index += 1) {
+      const leftWidth = widths[index];
+      const rightWidth = widths[index + 1];
+      if (leftWidth === undefined || rightWidth === undefined || rightWidth - leftWidth <= config.minStep) continue;
+      const left = frames.get(leftWidth)!;
+      const right = frames.get(rightWidth)!;
+      const changed = left.layoutSignature !== right.layoutSignature || issueFingerprint(left) !== issueFingerprint(right);
+      if (!changed) continue;
+      const width = Math.floor((leftWidth + rightWidth) / 2);
+      const band = Math.min(Math.floor((width - config.minWidth) / config.initialStep), Math.floor((config.maxWidth - config.minWidth) / config.initialStep));
+      const refinements = refinementsByBand.get(band) ?? 0;
+      const span = rightWidth - leftWidth;
+      const priority = transitionScore(left, right) / (1 + refinements) + Math.min(6, span / config.initialStep * 3);
+      candidates.push({ width, priority, band, span });
+    }
+    const next = candidates.sort((a, b) => b.priority - a.priority || b.span - a.span || a.width - b.width)[0];
+    if (!next || frames.has(next.width)) break;
+    frames.set(next.width, await sample(next.width));
+    refinementsByBand.set(next.band, (refinementsByBand.get(next.band) ?? 0) + 1);
+  }
+  return frames;
+}
+
+function selectVisualCaptureWidths(discovered: Map<number, FrameSignal>, target: number): number[] {
+  const frames = [...discovered.values()].sort((a, b) => a.width - b.width);
+  if (frames.length <= target) return frames.map((frame) => frame.width);
+  const selected = new Set<number>([frames[0]!.width, frames.at(-1)!.width]);
+  const transitionScores = new Map<number, number>();
+  for (let index = 0; index < frames.length - 1; index += 1) {
+    const left = frames[index]!;
+    const right = frames[index + 1]!;
+    if (left.layoutSignature === right.layoutSignature && issueFingerprint(left) === issueFingerprint(right)) continue;
+    const score = transitionScore(left, right);
+    transitionScores.set(left.width, Math.max(transitionScores.get(left.width) ?? 0, score));
+    transitionScores.set(right.width, Math.max(transitionScores.get(right.width) ?? 0, score));
+  }
+  while (selected.size < target) {
+    const candidate = frames
+      .filter((frame) => !selected.has(frame.width))
+      .map((frame) => {
+        const nearest = Math.min(...[...selected].map((width) => Math.abs(width - frame.width)));
+        const coverage = nearest / Math.max(1, frames.at(-1)!.width - frames[0]!.width) * 100;
+        const issue = frame.issues.reduce((score, finding) => Math.max(score, finding.severity === "error" ? 300 : finding.severity === "warning" ? 180 : 60), 0);
+        return { width: frame.width, priority: issue + (transitionScores.get(frame.width) ?? 0) * 4 + coverage };
+      })
+      .sort((a, b) => b.priority - a.priority || a.width - b.width)[0];
+    if (!candidate) break;
+    selected.add(candidate.width);
+  }
+  return [...selected].sort((a, b) => a - b);
+}
+
+async function probeDiscoveryFrame(page: Page, url: string, width: number, config: ResolvedScanOptions, budget: RequestBudget): Promise<FrameSignal> {
+  const started = Date.now();
+  await page.setViewportSize({ width, height: config.viewportHeight });
+  if (config.reloadPerWidth) await navigate(page, url, config, budget);
+  await preparePage(page, url, width, config, "discovery");
+  assertRequestBudget(budget);
+  const probe = await page.evaluate(probePage, { width, maxElements: config.maxElements, maxDomNodes: config.maxDomNodes });
+  return {
+    width,
+    height: config.viewportHeight,
+    document: probe.document,
+    layoutSignature: probe.signature,
+    issues: probe.issues,
+    durationMs: Date.now() - started,
+  };
+}
+
 interface RequestBudget {
   perNavigation: number;
   total: number;
   error?: Error;
 }
 
-async function installNetworkPolicy(context: BrowserContext, config: ResolvedScanOptions): Promise<RequestBudget> {
-  const budget: RequestBudget = { perNavigation: 0, total: 0 };
+async function createScanContext(browser: Browser, config: ResolvedScanOptions, budget: RequestBudget): Promise<BrowserContext> {
+  const context = await browser.newContext({
+    viewport: { width: config.minWidth, height: config.viewportHeight },
+    reducedMotion: "reduce",
+    colorScheme: "light",
+    deviceScaleFactor: 1,
+    locale: "en-US",
+    timezoneId: "UTC",
+    serviceWorkers: "block",
+  });
+  await installNetworkPolicy(context, config, budget);
+  return context;
+}
+
+async function installNetworkPolicy(context: BrowserContext, config: ResolvedScanOptions, budget: RequestBudget): Promise<void> {
   await context.route("**/*", async (route) => {
     const request = route.request();
     if (config.blockResourceTypes.includes(request.resourceType())) return route.abort("blockedbyclient");
@@ -219,7 +320,6 @@ async function installNetworkPolicy(context: BrowserContext, config: ResolvedSca
     }
     return route.continue();
   });
-  return budget;
 }
 
 async function navigate(page: Page, url: string, config: ResolvedScanOptions, budget: RequestBudget): Promise<void> {
@@ -236,7 +336,7 @@ function assertRequestBudget(budget: RequestBudget): void {
   if (budget.error) throw new Error(`WidthWatch ${budget.error.message}`);
 }
 
-async function preparePage(page: Page, url: string, width: number, config: ResolvedScanOptions): Promise<void> {
+async function preparePage(page: Page, url: string, width: number, config: ResolvedScanOptions, phase: "discovery" | "capture"): Promise<void> {
   const stabilizingCss = `*,*::before,*::after{animation-delay:0s!important;animation-duration:0s!important;transition:none!important;caret-color:transparent!important}${config.hideSelectors.map((selector) => `${selector}{visibility:hidden!important}`).join("")}`;
   await page.evaluate((css) => {
     let style = document.querySelector<HTMLStyleElement>("style[data-widthwatch-stability]");
@@ -247,25 +347,27 @@ async function preparePage(page: Page, url: string, width: number, config: Resol
     }
     style.textContent = css;
   }, stabilizingCss);
-  if (config.pageReady) await withTimeout(Promise.resolve(config.pageReady(page, { url, width })), config.pageReadyTimeoutMs, "pageReady hook");
+  if (config.pageReady) await withTimeout(Promise.resolve(config.pageReady(page, { url, width, phase })), config.pageReadyTimeoutMs, "pageReady hook");
   await page.evaluate(async () => { await document.fonts.ready; });
-  if (config.scrollSweep) await scrollSweep(page, config.maxScrollSteps, config.settleMs);
-  await page.evaluate(async ({ timeoutMs, waitForFullPage }) => {
-    const pending = [...document.images].filter((image) => {
-      if (image.complete) return false;
-      if (waitForFullPage) return true;
-      const rect = image.getBoundingClientRect();
-      return rect.bottom >= 0 && rect.top <= window.innerHeight && rect.right >= 0 && rect.left <= window.innerWidth;
-    });
-    if (pending.length) await Promise.race([
-      Promise.all(pending.map((image) => new Promise<void>((resolve) => {
-        image.addEventListener("load", () => resolve(), { once: true });
-        image.addEventListener("error", () => resolve(), { once: true });
-      }))),
-      new Promise<void>((resolve) => window.setTimeout(resolve, timeoutMs)),
-    ]);
-    window.scrollTo(0, 0);
-  }, { timeoutMs: Math.min(config.timeoutMs, 5_000), waitForFullPage: config.screenshot === "full-page" });
+  if (phase === "capture") {
+    if (config.scrollSweep) await scrollSweep(page, config.maxScrollSteps, config.settleMs);
+    await page.evaluate(async ({ timeoutMs, waitForFullPage }) => {
+      const pending = [...document.images].filter((image) => {
+        if (image.complete) return false;
+        if (waitForFullPage) return true;
+        const rect = image.getBoundingClientRect();
+        return rect.bottom >= 0 && rect.top <= window.innerHeight && rect.right >= 0 && rect.left <= window.innerWidth;
+      });
+      if (pending.length) await Promise.race([
+        Promise.all(pending.map((image) => new Promise<void>((resolve) => {
+          image.addEventListener("load", () => resolve(), { once: true });
+          image.addEventListener("error", () => resolve(), { once: true });
+        }))),
+        new Promise<void>((resolve) => window.setTimeout(resolve, timeoutMs)),
+      ]);
+      window.scrollTo(0, 0);
+    }, { timeoutMs: Math.min(config.timeoutMs, 5_000), waitForFullPage: config.screenshot === "full-page" });
+  }
   await page.waitForTimeout(config.settleMs);
 }
 
@@ -303,7 +405,7 @@ async function captureFrame(page: Page, url: string, width: number, config: Reso
   const started = Date.now();
   await page.setViewportSize({ width, height: config.viewportHeight });
   if (config.reloadPerWidth) await navigate(page, url, config, budget);
-  await preparePage(page, url, width, config);
+  await preparePage(page, url, width, config, "capture");
   assertRequestBudget(budget);
   const probe = await page.evaluate(probePage, { width, maxElements: config.maxElements, maxDomNodes: config.maxDomNodes });
   const screenshot = config.imageFormat === "jpeg"
@@ -435,11 +537,11 @@ function seedWidths(min: number, max: number, step: number): number[] {
   return [...values].sort((a, b) => a - b);
 }
 
-function issueFingerprint(frame: LayoutFrame): string {
+function issueFingerprint(frame: FrameSignal): string {
   return frame.issues.map((issue) => `${issue.kind}:${issue.elements.map((element) => element.selector).join(",")}`).sort().join("|");
 }
 
-function transitionScore(left: LayoutFrame, right: LayoutFrame): number {
+function transitionScore(left: FrameSignal, right: FrameSignal): number {
   const issueDelta = Math.abs(left.issues.length - right.issues.length) * 10;
   const documentDelta = Math.abs(left.document.height - right.document.height) / 20;
   return (left.layoutSignature === right.layoutSignature ? 0 : 20) + issueDelta + documentDelta;
@@ -493,6 +595,7 @@ function validateOptions(config: ResolvedScanOptions): void {
   if (!finiteInteger(config.initialStep) || config.initialStep < 1 || config.initialStep > 3840) throw new Error("initialStep must be a whole number between 1 and 3840.");
   if (!finiteInteger(config.minStep) || config.minStep < 1 || config.minStep > 3840) throw new Error("minStep must be a whole number between 1 and 3840.");
   if (!finiteInteger(config.maxSamples) || config.maxSamples < 2 || config.maxSamples > 100) throw new Error("maxSamples must be a whole number between 2 and 100.");
+  if (!finiteInteger(config.maxCaptureSamples) || config.maxCaptureSamples < 2 || config.maxCaptureSamples > 100) throw new Error("maxCaptureSamples must be a whole number between 2 and 100.");
   if (!finiteInteger(config.maxElements) || config.maxElements < 1 || config.maxElements > 10_000) throw new Error("maxElements must be a whole number between 1 and 10000.");
   if (!finiteInteger(config.maxDomNodes) || config.maxDomNodes < config.maxElements || config.maxDomNodes > 100_000) throw new Error("maxDomNodes must be a whole number between maxElements and 100000.");
   if (!finiteInteger(config.timeoutMs) || config.timeoutMs < 1 || config.timeoutMs > 300_000) throw new Error("timeoutMs must be a whole number between 1 and 300000.");

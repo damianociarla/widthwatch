@@ -20,9 +20,10 @@ npx widthwatch init
 
 The engine returns versioned TypeScript objects, renders a portable interactive HTML report, and compares a candidate page with a baseline at matching widths. Its adaptive sampler discovers where geometry changes and spends the screenshot budget around those intervals instead of pretending that mobile/tablet/desktop are the whole responsive surface.
 
-## What exists in v0.2
+## What exists in v0.3
 
 - adaptive 320–1440px width timeline;
+- two-pass visual scanning: fast geometry discovery followed by bounded full-page evidence capture;
 - document and element overflow detection;
 - clipped-text and material leaf-overlap detection;
 - layout discontinuity signals;
@@ -84,7 +85,7 @@ npx widthwatch "$CANDIDATE_URL" \
 
 Baseline and candidate must run in the same pinned browser container. Browser rendering can vary by operating system, fonts, browser version and other host details; a visual threshold cannot compensate for unrelated environments.
 
-The CLI uses correctness-first visual capture and reloads each width. For a fast diagnostic probe that only inspects the viewport, use `--layout-only`; add `--reload-per-width` when a layout-only application calculates responsive state only during startup.
+The CLI uses correctness-first visual capture and reloads each width. Adaptive visual scans probe up to 24 widths geometrically, then use `--max-captures` (default 8) to bound the expensive full-page evidence schedule. Exact-width baseline comparisons always capture every required width. For a fast diagnostic probe that only inspects the viewport, use `--layout-only`; add `--reload-per-width` when a layout-only application calculates responsive state only during startup.
 
 The generated workflow is deliberately read-only and uploads the portable report as an artifact. It accepts a deployed preview URL through `workflow_call` or manual dispatch, and never uses `pull_request_target`. Connect it to the step that already deploys your application preview.
 
@@ -121,7 +122,7 @@ npm start --workspace @widthwatch/api
 
 ## Public demo limits
 
-The hosted surface is intentionally not the local package in the cloud. It accepts one credential-free public page, uses 5 adaptive widths with compact JPEG evidence, blocks media, caps navigation at 15 seconds and 200 requests, admits at most three queued jobs, and runs one browser. Job status remains in memory for 30 minutes; when `AWS_INSTANCE_ROLE_ARN` is configured, completed HTML reports are stored in a private encrypted S3 bucket and expire automatically after 7 days. The admission request streams lightweight heartbeats while the browser works so App Runner does not throttle detached CPU, while status polling returns lightweight metadata rather than embedded screenshots. Separate client, target, global, CloudFront/WAF and compute limits prevent arbitrary scale-out. The local package keeps its lossless PNG evidence and larger 24-sample default for CI and detailed analysis.
+The hosted surface is intentionally not the local package in the cloud. It accepts one credential-free public page, uses 5 adaptive layout captures with compact JPEG evidence, blocks media, caps navigation at 15 seconds and 200 requests, admits at most three queued jobs, and runs one browser. Job status remains in memory for 30 minutes; when `AWS_INSTANCE_ROLE_ARN` is configured, completed HTML reports are stored in a private encrypted S3 bucket and expire automatically after 7 days. The admission request streams lightweight heartbeats while the browser works so App Runner does not throttle detached CPU, while status polling returns lightweight metadata rather than embedded screenshots. Separate client, target, global, CloudFront/WAF and compute limits prevent arbitrary scale-out. The local visual package uses 24 discovery probes, up to 8 lossless evidence captures by default, and exact schedules for CI comparison.
 
 See [architecture](docs/architecture.md), [OpenAPI](docs/openapi.yml), and [security policy](SECURITY.md).
 

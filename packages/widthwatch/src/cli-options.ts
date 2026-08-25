@@ -10,6 +10,7 @@ export interface ParsedCliOptions {
   minWidth?: number;
   maxWidth?: number;
   maxSamples?: number;
+  maxCaptures?: number;
   fullPage: boolean;
   layoutOnly: boolean;
   reloadPerWidth?: true;
@@ -18,7 +19,7 @@ export interface ParsedCliOptions {
   version: boolean;
 }
 
-const valueOptions: ReadonlyMap<string, "config" | "output" | "json" | "baseline" | "minWidth" | "maxWidth" | "maxSamples"> = new Map([
+const valueOptions: ReadonlyMap<string, "config" | "output" | "json" | "baseline" | "minWidth" | "maxWidth" | "maxSamples" | "maxCaptures"> = new Map([
   ["--config", "config"],
   ["--output", "output"],
   ["--json", "json"],
@@ -26,6 +27,7 @@ const valueOptions: ReadonlyMap<string, "config" | "output" | "json" | "baseline
   ["--min-width", "minWidth"],
   ["--max-width", "maxWidth"],
   ["--max-samples", "maxSamples"],
+  ["--max-captures", "maxCaptures"],
 ] as const);
 
 export function parseCliOptions(args: string[]): ParsedCliOptions {
@@ -50,7 +52,7 @@ export function parseCliOptions(args: string[]): ParsedCliOptions {
       const value = args[index + 1];
       if (!value || value.startsWith("--")) throw new Error(`${argument} requires a value.`);
       index += 1;
-      if (key === "minWidth" || key === "maxWidth" || key === "maxSamples") parsed[key] = Number(value);
+      if (key === "minWidth" || key === "maxWidth" || key === "maxSamples" || key === "maxCaptures") parsed[key] = Number(value);
       else parsed[key] = value;
       continue;
     }
@@ -67,6 +69,7 @@ export function applyCliScanOptions(configured: ScanOptions | undefined, parsed:
   if (parsed.minWidth !== undefined) scanOptions.minWidth = parsed.minWidth;
   if (parsed.maxWidth !== undefined) scanOptions.maxWidth = parsed.maxWidth;
   if (parsed.maxSamples !== undefined) scanOptions.maxSamples = parsed.maxSamples;
+  if (parsed.maxCaptures !== undefined) scanOptions.maxCaptureSamples = parsed.maxCaptures;
   if (parsed.layoutOnly) scanOptions.mode = "layout";
   if (parsed.reloadPerWidth) scanOptions.reloadPerWidth = true;
   else if (!parsed.layoutOnly && configured?.reloadPerWidth === undefined) scanOptions.reloadPerWidth = true;

@@ -16,6 +16,7 @@ export default defineConfig({
     minWidth: 320,
     maxWidth: 1440,
     maxSamples: 24,
+    maxCaptureSamples: 8,
     hideSelectors: ["[data-live-clock]"],
   },
   compare: {

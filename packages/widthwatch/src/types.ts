@@ -92,6 +92,12 @@ export interface WidthWatchReport {
     pageReady: boolean;
     readinessKey: string | null;
   };
+  sampling?: {
+    protocolVersion: 1;
+    strategy: "exact" | "adaptive-single-pass" | "adaptive-two-pass";
+    discoveryWidths: number[];
+    capturedWidths: number[];
+  };
   frames: LayoutFrame[];
   transitions: WidthTransition[];
   issueRanges?: ResponsiveIssueRange[];
@@ -145,6 +151,8 @@ export interface ScanOptions {
   initialStep?: number;
   minStep?: number;
   maxSamples?: number;
+  /** Maximum visual evidence frames selected after adaptive discovery. Exact-width scans always capture every requested width. */
+  maxCaptureSamples?: number;
   maxElements?: number;
   maxDomNodes?: number;
   timeoutMs?: number;
@@ -152,7 +160,7 @@ export interface ScanOptions {
   scrollSweep?: boolean;
   maxScrollSteps?: number;
   reloadPerWidth?: boolean;
-  pageReady?: (page: Page, context: { url: string; width: number }) => void | Promise<void>;
+  pageReady?: (page: Page, context: { url: string; width: number; phase: "discovery" | "capture" }) => void | Promise<void>;
   readinessKey?: string;
   pageReadyTimeoutMs?: number;
   screenshot?: "viewport" | "full-page";

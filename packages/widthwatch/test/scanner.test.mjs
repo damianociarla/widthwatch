@@ -36,6 +36,81 @@ test("scanAtWidths captures exactly the requested deterministic schedule", async
   const result = await scanAtWidths(url, [777, 321], { viewportHeight: 480, settleMs: 0 });
   assert.deepEqual(result.frames.map((frame) => frame.width), [321, 777]);
   assert.deepEqual(result.range, { min: 321, max: 777, height: 480 });
+  assert.equal(result.capture.protocolVersion, 2);
+  assert.deepEqual(result.sampling, { protocolVersion: 1, strategy: "exact", discoveryWidths: [], capturedWidths: [321, 777] });
+});
+
+test("adaptive visual scans discover broadly and capture a bounded final schedule", async (context) => {
+  const url = await fixture(context, (_request, response) => html(response, `
+    <style>
+      #target{width:80px}
+      @media(min-width:500px){#target{transform:translateY(120px)}}
+      @media(min-width:900px){#target{transform:translateY(260px)}}
+    </style>
+    <div id="target">target</div>
+  `));
+  const phases = [];
+  const captureTaint = [];
+  const result = await scanResponsive(url, {
+    mode: "visual",
+    minWidth: 320,
+    maxWidth: 1120,
+    initialStep: 200,
+    minStep: 8,
+    maxSamples: 7,
+    maxCaptureSamples: 3,
+    viewportHeight: 480,
+    settleMs: 0,
+    scrollSweep: false,
+    pageReady: async (page, { phase }) => {
+      phases.push(phase);
+      if (phase === "discovery") await page.evaluate(() => {
+        document.body.dataset.discoveryTaint = "true";
+        localStorage.setItem("widthwatch-discovery-taint", "true");
+      });
+      else captureTaint.push(await page.evaluate(() => ({ dom: document.body.dataset.discoveryTaint ?? null, storage: localStorage.getItem("widthwatch-discovery-taint") })));
+    },
+    readinessKey: "two-pass-v1",
+  });
+  assert.equal(result.sampling.strategy, "adaptive-two-pass");
+  assert.equal(result.sampling.discoveryWidths.length, 7);
+  assert.equal(result.frames.length, 3);
+  assert.deepEqual(result.sampling.capturedWidths, result.frames.map((frame) => frame.width));
+  assert.deepEqual([result.frames[0].width, result.frames.at(-1).width], [320, 1120]);
+  assert.equal(phases.filter((phase) => phase === "capture").length, 3);
+  assert.ok(phases.filter((phase) => phase === "discovery").length > 3);
+  assert.deepEqual(captureTaint, [
+    { dom: null, storage: null },
+    { dom: null, storage: null },
+    { dom: null, storage: null },
+  ]);
+});
+
+test("maxCaptureSamples remains a hard cap when every discovery probe has a finding", async (context) => {
+  const url = await fixture(context, (_request, response) => html(response, '<p style="width:20px;white-space:nowrap;overflow:hidden">always clipped</p>'));
+  const result = await scanResponsive(url, { mode: "visual", minWidth: 320, maxWidth: 1120, initialStep: 160, maxSamples: 6, maxCaptureSamples: 3, viewportHeight: 480, settleMs: 0, scrollSweep: false });
+  assert.equal(result.sampling.discoveryWidths.length, 6);
+  assert.equal(result.frames.length, 3);
+});
+
+test("visual evidence prioritizes a sampled error while preserving range endpoints", async (context) => {
+  const url = await fixture(context, (_request, response) => html(response, `
+    <style>
+      #target{display:none}
+      @media(min-width:600px) and (max-width:700px){#target{display:block;width:20px;white-space:nowrap;overflow:hidden}}
+    </style>
+    <p id="target">mid-range clipped content</p>
+  `));
+  const result = await scanResponsive(url, { mode: "visual", minWidth: 320, maxWidth: 1120, initialStep: 160, maxSamples: 6, maxCaptureSamples: 3, viewportHeight: 480, settleMs: 0, scrollSweep: false });
+  assert.deepEqual(result.frames.map((frame) => frame.width), [320, 640, 1120]);
+  assert.ok(result.frames[1].issues.some((issue) => issue.kind === "clipped-text"));
+});
+
+test("maxCaptureSamples is normalized to the discovery budget", async (context) => {
+  const url = await fixture(context, (_request, response) => html(response, "<main>stable</main>"));
+  const result = await scanResponsive(url, { mode: "visual", minWidth: 320, maxWidth: 1120, initialStep: 200, maxSamples: 4, maxCaptureSamples: 10, viewportHeight: 480, settleMs: 0, scrollSweep: false });
+  assert.equal(result.sampling.discoveryWidths.length, 4);
+  assert.equal(result.frames.length, 4);
 });
 
 test("standalone scans can use bounded JPEG evidence", async (context) => {
@@ -72,14 +147,14 @@ test("pageReady waits for application-specific asynchronous state", async (conte
   const url = await fixture(context, (_request, response) => html(response, `
     <script>setTimeout(()=>{const node=document.createElement('div');node.id='ready';node.style.cssText='width:30px;white-space:nowrap;overflow:hidden';node.textContent='ready content';document.body.append(node)},80)</script>
   `));
-  const widths = [];
+  const calls = [];
   const result = await scanAtWidths(url, [320], {
     mode: "layout",
     settleMs: 0,
-    pageReady: async (page, context) => { widths.push(context.width); await page.waitForSelector("#ready"); },
+    pageReady: async (page, hookContext) => { calls.push([hookContext.width, hookContext.phase]); await page.waitForSelector("#ready"); },
     readinessKey: "fixture-ready-v1",
   });
-  assert.deepEqual(widths, [320]);
+  assert.deepEqual(calls, [[320, "capture"]]);
   assert.ok(result.frames[0].issues.some((issue) => issue.kind === "clipped-text" && issue.elements[0]?.selector === "#ready"));
 });
 
@@ -105,6 +180,18 @@ test("request budgets reset per navigation while retaining a separate total cap"
   await assert.rejects(
     scanAtWidths(url, [320, 480, 640], { ...options, maxTotalRequests: 50 }),
     /WidthWatch total request budget exceeded \(50 allowed requests\)/,
+  );
+});
+
+test("adaptive discovery and evidence share one total request budget", async (context) => {
+  const scripts = Array.from({ length: 4 }, (_, index) => `<script src="/asset-${index}.js"></script>`).join("");
+  const url = await fixture(context, (request, response) => {
+    if (request.url === "/") return html(response, scripts);
+    response.writeHead(200, { "content-type": "text/javascript" }).end("void 0");
+  });
+  await assert.rejects(
+    scanResponsive(url, { mode: "visual", minWidth: 320, maxWidth: 640, initialStep: 320, maxSamples: 2, maxCaptureSamples: 2, viewportHeight: 480, settleMs: 0, scrollSweep: false, maxRequestsPerNavigation: 10, maxTotalRequests: 7 }),
+    /WidthWatch total request budget exceeded \(7 allowed requests\)/,
   );
 });
 
@@ -143,4 +230,6 @@ test("adaptive refinement spends budget across separate transition bands", async
   `));
   const result = await scanResponsive(url, { mode: "layout", minWidth: 320, maxWidth: 1120, initialStep: 400, minStep: 8, maxSamples: 5, viewportHeight: 480, settleMs: 0 });
   assert.ok(result.frames.some((frame) => frame.width > 720 && frame.width < 1120), `Expected refinement near the second transition, got ${result.frames.map((frame) => frame.width).join(", ")}`);
+  assert.equal(result.sampling.strategy, "adaptive-single-pass");
+  assert.deepEqual(result.sampling.discoveryWidths, result.sampling.capturedWidths);
 });

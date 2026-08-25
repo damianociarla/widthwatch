@@ -39,6 +39,7 @@ export function scanStatusPayload(job: HostedScanJob): Record<string, unknown> {
         scannedAt: job.report.scannedAt,
         durationMs: job.report.durationMs,
         range: job.report.range,
+        sampling: job.report.sampling,
         frames: job.report.frames.map((frame) => ({
           width: frame.width,
           issues: frame.issues.map((issue) => ({ severity: issue.severity })),
