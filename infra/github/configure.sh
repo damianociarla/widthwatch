@@ -60,6 +60,9 @@ main() {
   gh api --method PUT "repos/$repository/environments/monitoring" --input "$script_directory/monitoring-environment.json" >/dev/null
   reconcile_deployment_policies monitoring "$script_directory/monitoring-deployment-policies.json"
 
+  gh api --method PUT "repos/$repository/environments/github-pages" --input "$script_directory/pages-environment.json" >/dev/null
+  reconcile_deployment_policies github-pages "$script_directory/pages-deployment-policies.json"
+
   upsert_ruleset "Protect main" "$script_directory/main-ruleset.json"
   upsert_ruleset "Authorize release tag creation" "$script_directory/release-tag-creation-ruleset.json"
   upsert_ruleset "Keep release tags immutable" "$script_directory/release-tags-ruleset.json"

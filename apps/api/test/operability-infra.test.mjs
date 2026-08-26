@@ -269,6 +269,7 @@ test("versioned GitHub policy protects main, release tags and deployment refs", 
   const configure = await source("infra/github/configure.sh");
   const productionPolicies = JSON.parse(await source("infra/github/production-deployment-policies.json"));
   const monitoringPolicies = JSON.parse(await source("infra/github/monitoring-deployment-policies.json"));
+  const pagesPolicies = JSON.parse(await source("infra/github/pages-deployment-policies.json"));
   assert.equal(main.enforcement, "active");
   assert.deepEqual(
     main.rules.find((rule) => rule.type === "required_status_checks").parameters.required_status_checks.map((check) => check.context),
@@ -293,6 +294,11 @@ test("versioned GitHub policy protects main, release tags and deployment refs", 
     { name: "v*", type: "tag" },
   ]);
   assert.deepEqual(monitoringPolicies, [{ name: "main", type: "branch" }]);
+  assert.deepEqual(pagesPolicies, [
+    { name: "main", type: "branch" },
+    { name: "v*", type: "tag" },
+  ]);
+  assert.match(configure, /reconcile_deployment_policies github-pages/);
   assert.match(configure, /--method DELETE/);
   assert.match(configure, /Deployment policy drift remains/);
 });
