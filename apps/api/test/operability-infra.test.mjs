@@ -88,10 +88,11 @@ test("release only accepts an immutable semantic-version tag connected to main",
   const validator = `${root}/infra/github/validate-release-ref.sh`;
   const packageVersion = JSON.parse(await source("package.json")).version;
   const validTag = `v${packageVersion}`;
-  assert.doesNotMatch(workflow, /workflow_dispatch/);
-  assert.doesNotMatch(workflow, /inputs\.tag/);
-  assert.doesNotMatch(workflow, /ref: "\$\{\{ env\.RELEASE_TAG \}\}"/);
-  assert.match(workflow, /ref: "\$\{\{ github\.sha \}\}"/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /release_tag:[\s\S]*required: true/);
+  assert.match(workflow, /github\.event_name == 'workflow_dispatch' && inputs\.release_tag \|\| github\.ref_name/);
+  assert.match(workflow, /ref: "\$\{\{ env\.RELEASE_TAG \}\}"/);
+  assert.doesNotMatch(workflow, /ref: "\$\{\{ github\.sha \}\}"/);
   assert.match(workflow, /validate-release-ref\.sh/);
 
   const directory = await mkdtemp(join(tmpdir(), "widthwatch-release-ref-"));
@@ -167,6 +168,8 @@ test("release installs the versioned scanner control-plane template before appli
   assert.match(release, /needs: \[release-ref, validate, upgrade-scanner-switch\]/);
   assert.doesNotMatch(release, /secrets: inherit/);
   assert.match(workflow, /workflow_call/);
+  assert.match(workflow, /release_tag: \{ required: true, type: string \}/);
+  assert.match(workflow, /ref: "\$\{\{ inputs\.release_tag \}\}"/);
   assert.match(workflow, /validate-release-ref\.sh/);
   assert.match(workflow, /AWS_SCANNER_SWITCH_ROLE_ARN/);
   assert.match(upgrade, /--template-body "file:\/\/\$template_path"/);
@@ -207,7 +210,7 @@ test("Pages deploys only an existing stable GitHub Release and never mutable mai
   assert.match(release, /deploy-pages:/);
   assert.match(release, /needs: github-release/);
   assert.match(release, /uses: \.\/\.github\/workflows\/pages\.yml/);
-  assert.match(release, /release_tag: \$\{\{ github\.ref_name \}\}/);
+  assert.match(release, /release_tag: \$\{\{ github\.event_name == 'workflow_dispatch' && inputs\.release_tag \|\| github\.ref_name \}\}/);
 });
 
 test("the scheduled canary crosses the expected public path", async () => {

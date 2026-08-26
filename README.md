@@ -140,7 +140,7 @@ See [architecture](docs/architecture.md), [OpenAPI](docs/openapi.yml), [security
 7. Configure npm trusted publishing for repository `damianociarla/widthwatch`, workflow `release.yml`, environment `production`.
 8. Enable GitHub Pages with GitHub Actions as its source.
 
-A `v*` tag validates, deploys the API, publishes npm and creates the GitHub Release. Merges to protected `main` publish the website. Actions are pinned to full SHAs and maintained by Dependabot. AWS credentials are short-lived through GitHub OIDC; the scheduled canary assumes a separate read-only role, while npm trusted publishing also uses OIDC and emits provenance.
+A `v*` tag validates, deploys the API, publishes npm, creates the GitHub Release and then publishes that exact released tag to the website. A manual recovery dispatch can resume an existing immutable tag after provider-side run loss; it cannot release mutable `main`. Actions are pinned to full SHAs and maintained by Dependabot. AWS credentials are short-lived through GitHub OIDC; the scheduled canary assumes a separate read-only role, while npm trusted publishing also uses OIDC and emits provenance.
 
 The `Deploy API` workflow can bootstrap or redeploy only the hosted scanner without publishing an npm release.
 

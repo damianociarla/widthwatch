@@ -14,6 +14,8 @@ Every release now parses `scanner-switch.yml` and evaluates both enabled and dis
 
 GitHub Pages no longer deploys from mutable `main`. The release workflow deploys the site only after the stable GitHub Release exists, checking out and validating that exact tag. Manual recovery also requires the tag of an existing non-draft, non-prerelease GitHub Release.
 
+The release workflow also accepts the existing immutable tag as an explicit recovery input when GitHub loses a run before creating jobs and native rerun is unavailable. All validation, control-plane, application, npm, GitHub Release and Pages jobs still check out the tag; the mutable dispatch commit is never released. Publication steps remain idempotent, so recovery cannot require moving or recreating a protected tag.
+
 ## v0.4.10
 
 This patch adds a reproducible scanner control-plane migration without changing report schema, sampling protocol or capture protocol. Existing baselines compatible with v0.4.0–v0.4.9 remain compatible with v0.4.10.
