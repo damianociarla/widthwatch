@@ -12,6 +12,10 @@ Resources:
       Name: widthwatch-edge
       Scope: CLOUDFRONT
       DefaultAction: { Allow: {} }
+      CustomResponseBodies:
+        ScannerRateLimited:
+          ContentType: APPLICATION_JSON
+          Content: '{"error":"rate_limited","message":"The public scanner rate limit has been reached."}'
       VisibilityConfig: { CloudWatchMetricsEnabled: true, MetricName: widthwatch-edge, SampledRequestsEnabled: true }
       Rules:
         - Name: ScannerControlPlane
@@ -26,7 +30,14 @@ Resources:
           VisibilityConfig: { CloudWatchMetricsEnabled: true, MetricName: common, SampledRequestsEnabled: true }
         - Name: ScanRateLimit
           Priority: 2
-          Action: { Block: {} }
+          Action:
+            Block:
+              CustomResponse:
+                ResponseCode: 429
+                CustomResponseBodyKey: ScannerRateLimited
+                ResponseHeaders:
+                  - { Name: Access-Control-Allow-Origin, Value: "https://damianociarla.github.io" }
+                  - { Name: Cache-Control, Value: "no-store" }
           Statement:
             RateBasedStatement:
               AggregateKeyType: IP

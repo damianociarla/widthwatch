@@ -14,11 +14,25 @@ Resources:
       Description: Independent emergency admission switch, switch-only updates are owned by scanner-switch.yml
       Scope: CLOUDFRONT
       Capacity: 10
+      CustomResponseBodies:
+        ScannerPaused:
+          ContentType: APPLICATION_JSON
+          Content: '{"error":"scanner_paused","message":"The public scanner is temporarily paused."}'
       VisibilityConfig: { CloudWatchMetricsEnabled: true, MetricName: widthwatch-scanner-switch, SampledRequestsEnabled: true }
       Rules:
         - Name: ScannerAdmission
           Priority: 0
-          Action: !If [ScannerEnabled, { Count: {} }, { Block: {} }]
+          Action:
+            !If
+              - ScannerEnabled
+              - { Count: {} }
+              - Block:
+                  CustomResponse:
+                    ResponseCode: 403
+                    CustomResponseBodyKey: ScannerPaused
+                    ResponseHeaders:
+                      - { Name: Access-Control-Allow-Origin, Value: "https://damianociarla.github.io" }
+                      - { Name: Cache-Control, Value: "no-store" }
           Statement:
             AndStatement:
               Statements:

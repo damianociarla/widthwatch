@@ -42,7 +42,7 @@ A sanitized refusal before a hosted job exists. It records only a stable capacit
 
 ## Scanner control plane
 
-The fail-closed emergency boundary for public scan admission. A dedicated WAF rule group owns only exact `POST /v1/scans`; its switch-only stack and least-privilege workflow are independent of image publication, App Runner and ordinary edge deployments. Disable never depends on alerting. Enable requires confirmed regional alert subscriptions.
+The fail-closed emergency boundary for public scan admission. A dedicated WAF rule group owns only exact `POST /v1/scans`; its switch-only stack and least-privilege workflow are independent of image publication, App Runner and ordinary edge deployments. Disable never depends on alerting. Enable requires confirmed regional alert subscriptions. Edge refusals preserve the public HTTP contract with explicit JSON status, landing-origin CORS and no-store semantics.
 
 ## Operational canary
 

@@ -1,5 +1,13 @@
 # Migration notes
 
+## v0.4.9
+
+This patch closes release-ref and cross-origin scanner-control gaps without changing report schema, sampling protocol or capture protocol. Existing baselines compatible with v0.4.0–v0.4.8 remain compatible with v0.4.9.
+
+Releases now start only from a pushed stable semantic-version tag. Manual release dispatch was removed; failed releases are resumed with GitHub's native rerun operation. A release gate verifies the exact tag, event commit and ancestry from `main`, and every job checks out the immutable event SHA rather than a caller-controlled ref.
+
+The independent scanner switch returns a JSON `403` with the landing origin's CORS header and `Cache-Control: no-store`; the edge rate limit returns the equivalent JSON/CORS response with status `429`. The browser can therefore distinguish a paused scanner and edge quota from a generic network outage. GitHub deployment branch policies are now reconciled against versioned allowlist manifests: unexpected refs are deleted, missing refs are restored and residual drift fails the policy run.
+
 ## v0.4.8
 
 This patch hardens the GitHub/AWS supply chain without changing report schema, sampling protocol or capture protocol. Existing baselines compatible with v0.4.0–v0.4.7 remain compatible with v0.4.8.
