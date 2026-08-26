@@ -12,7 +12,7 @@ Authenticate `gh` as the repository owner, then run from a clean released checko
 
 The operation is convergent: it removes deployment refs not present in the versioned manifests, restores missing refs and fails if any residual drift remains. Dependabot proposes verified GitHub Actions SHA updates through pull requests; never replace a full SHA with a mobile major tag.
 
-Releases are created only by pushing a stable `vX.Y.Z` tag connected to `main`. Before any production credentials are obtained, the release contract requires `X.Y.Z` to match every package manifest and lockfile entry plus OpenAPI and landing metadata. The workflow checks out the event SHA in every job and has no manual dispatch input. If a release job fails after the tag exists, use GitHub's **Re-run failed jobs** action; do not move or recreate the immutable tag.
+Releases normally start by pushing a stable `vX.Y.Z` tag connected to `main`. Before any production credentials are obtained, the release contract requires `X.Y.Z` to match every package manifest and lockfile entry plus OpenAPI and landing metadata. Every job checks out and validates that exact immutable tag. If a release job fails after the tag exists, first use GitHub's **Re-run failed jobs** action. If GitHub loses the run before creating jobs and native rerun remains unavailable, manually dispatch `release.yml` from `main` with the existing tag; the same validation and idempotent publication path runs against the tag, never the mutable dispatch commit. Do not move or recreate the tag.
 
 ## Environment boundaries
 
@@ -40,7 +40,7 @@ Acceptance criteria:
 - `main` requires `verify (22)` and `verify (24)` through a pull request;
 - production policies contain branch `main` and tag `v*` only;
 - monitoring contains branch `main` only;
-- `release.yml` has no `workflow_dispatch` and every release checkout uses `github.sha`;
+- `release.yml` requires an explicit `release_tag` for recovery dispatches and every release checkout uses that validated tag;
 - the release-ref gate rejects any tag that differs from package, lockfile, OpenAPI or JSON-LD versions;
 - the scanner control-plane upgrade completes with a verified digest before application deployment;
 - the scanner switch role can read only the installed scanner template for transactional rollback, while the application deploy role remains read-only for that stack;

@@ -1,28 +1,37 @@
 name: Release
 on:
   push: { tags: ["v*"] }
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing immutable tag to resume after an interrupted release
+        required: true
+        type: string
 permissions: {}
 concurrency: { group: widthwatch-release, cancel-in-progress: false }
 env:
-  RELEASE_TAG: ${{ github.ref_name }}
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
 jobs:
   release-ref:
     runs-on: ubuntu-latest
     permissions: { contents: read }
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with: { ref: "${{ github.sha }}", fetch-depth: 0 }
+        with: { ref: "${{ env.RELEASE_TAG }}", fetch-depth: 0 }
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with: { node-version: 24, package-manager-cache: false }
       - name: Verify immutable release ref
-        run: ./infra/github/validate-release-ref.sh "$GITHUB_REF_NAME" "$GITHUB_SHA"
+        run: |
+          release_sha="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          GITHUB_REF_TYPE=tag GITHUB_REF="refs/tags/$RELEASE_TAG" \
+            ./infra/github/validate-release-ref.sh "$RELEASE_TAG" "$release_sha"
   validate:
     needs: release-ref
     runs-on: ubuntu-latest
     permissions: { contents: read }
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with: { ref: "${{ github.sha }}" }
+        with: { ref: "${{ env.RELEASE_TAG }}" }
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with: { node-version: 24, cache: npm }
       - run: npm ci
@@ -33,6 +42,8 @@ jobs:
     needs: [release-ref, validate]
     permissions: { contents: read, id-token: write }
     uses: ./.github/workflows/upgrade-scanner-switch.yml
+    with:
+      release_tag: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
   deploy-api:
     needs: [release-ref, validate, upgrade-scanner-switch]
     runs-on: ubuntu-latest
@@ -40,7 +51,7 @@ jobs:
     permissions: { contents: read, id-token: write }
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with: { ref: "${{ github.sha }}" }
+        with: { ref: "${{ env.RELEASE_TAG }}" }
       - uses: aws-actions/configure-aws-credentials@451ce2a72e8d729a59ebeaacab82dbce58e7af4c # v6
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
@@ -62,7 +73,7 @@ jobs:
     permissions: { contents: read, id-token: write }
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with: { ref: "${{ github.sha }}" }
+        with: { ref: "${{ env.RELEASE_TAG }}" }
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           {
@@ -86,7 +97,7 @@ jobs:
     permissions: { contents: write }
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with: { ref: "${{ github.sha }}" }
+        with: { ref: "${{ env.RELEASE_TAG }}" }
       - name: Create GitHub Release when missing
         shell: bash
         run: |
@@ -101,4 +112,4 @@ jobs:
     permissions: { contents: read, pages: write, id-token: write }
     uses: ./.github/workflows/pages.yml
     with:
-      release_tag: ${{ github.ref_name }}
+      release_tag: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
