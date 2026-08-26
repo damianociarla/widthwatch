@@ -33,7 +33,6 @@ jobs:
     needs: [release-ref, validate]
     permissions: { contents: read, id-token: write }
     uses: ./.github/workflows/upgrade-scanner-switch.yml
-    secrets: inherit
   deploy-api:
     needs: [release-ref, validate, upgrade-scanner-switch]
     runs-on: ubuntu-latest

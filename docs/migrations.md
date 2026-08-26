@@ -1,5 +1,15 @@
 # Migration notes
 
+## v0.4.11
+
+This patch makes scanner control-plane upgrades transactional without changing report schema, sampling protocol or capture protocol. Existing baselines compatible with v0.4.0–v0.4.10 remain compatible with v0.4.11.
+
+Before installing a candidate template, the release now captures the live CloudFormation template, `PublicScannerEnabled` value and `ControlPlaneRevision`. If state, revision or edge verification fails after installation, the release restores the captured template and parameters, verifies the restored edge contract and remains failed. A rollback that cannot be applied or verified is reported as a critical operational failure rather than being hidden by the original candidate error.
+
+The narrow scanner switch role gains only `cloudformation:GetTemplate` on its existing dedicated stack. Apply the additive `infra/aws/scanner-switch-iam.yml` update before the first v0.4.11 release; no application runtime permission changes. The release reusable workflow no longer inherits caller secrets, and the canary removes its complete temporary response directory.
+
+Every release now parses `scanner-switch.yml` and evaluates both enabled and disabled WAF contracts. Live verification continues to exercise only the preserved state, so a scanner disabled during an incident is never enabled automatically for testing.
+
 ## v0.4.10
 
 This patch adds a reproducible scanner control-plane migration without changing report schema, sampling protocol or capture protocol. Existing baselines compatible with v0.4.0–v0.4.9 remain compatible with v0.4.10.

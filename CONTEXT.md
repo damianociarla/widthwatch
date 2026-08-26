@@ -46,7 +46,7 @@ The fail-closed emergency boundary for public scan admission. A dedicated WAF ru
 
 ## Control-plane revision
 
-The SHA-256 identity of the versioned scanner-control template installed by a protected release. A control-plane upgrade replaces the full CloudFormation template, preserves `PublicScannerEnabled` exactly and verifies the installed revision plus the edge contract. The operational switch changes only admission state with the previously installed template and revision.
+The SHA-256 identity of the versioned scanner-control template installed by a protected release. A control-plane upgrade is transactional: it snapshots the installed template, state and revision before mutation; installs and verifies the candidate; and restores and verifies that snapshot after any semantic verification failure while leaving the release red. The operational switch changes only admission state with the previously installed template and revision.
 
 ## Operational canary
 

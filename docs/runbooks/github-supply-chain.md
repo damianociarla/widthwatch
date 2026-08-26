@@ -43,5 +43,6 @@ Acceptance criteria:
 - `release.yml` has no `workflow_dispatch` and every release checkout uses `github.sha`;
 - the release-ref gate rejects any tag that differs from package, lockfile, OpenAPI or JSON-LD versions;
 - the scanner control-plane upgrade completes with a verified digest before application deployment;
+- the scanner switch role can read only the installed scanner template for transactional rollback, while the application deploy role remains read-only for that stack;
 - `AWS_CANARY_ROLE_ARN` points to `widthwatch-canary`;
 - a successful canary cannot call `cloudformation:UpdateStack` or `iam:PassRole`.
