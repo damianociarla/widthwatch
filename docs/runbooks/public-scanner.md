@@ -15,7 +15,7 @@ aws cloudformation describe-stacks \
 
 `false` / `DISABLED` is the cold-bootstrap default. An absent stack is not an enabled state; bootstrap the dedicated stack before the first application deploy. The application role has read-only access and refuses to deploy while the stack is absent.
 
-`ControlPlaneRevision` is `bootstrap` until the first protected release upgrade, then becomes the SHA-256 digest of the installed template. A successful release summary records the same digest and preserved state. Before mutation, the upgrade stores the live template, state and revision in runner-temporary storage. If candidate state, revision or edge verification fails, it restores that snapshot, verifies the restored edge behavior and still leaves the workflow red. Do not update the full template with the operational toggle workflow or an ordinary application deploy.
+`ControlPlaneRevision` is `bootstrap` until the first protected release upgrade, then becomes the SHA-256 digest of the installed template. A successful release summary records the same digest and preserved state. Before mutation, the upgrade stores the live template, state and revision in runner-temporary storage. Each accepted mutation is followed by its client request token until the root event and stack status reach a coherent terminal outcome. Transient CLI or AWS observation failures are retried and never imply that the previous revision is still installed. If candidate state, revision or edge verification fails after a confirmed install, the workflow restores that snapshot, verifies the restored edge behavior and still leaves the workflow red. Do not update the full template with the operational toggle workflow or an ordinary application deploy.
 
 ## Dispatch an exact switch run
 
@@ -63,7 +63,9 @@ Expected results: health `200`; scan admission `403` with JSON error `scanner_pa
 
 Do not dispatch a separate mutable ref. A `vX.Y.Z` release calls `upgrade-scanner-switch.yml` as a reusable workflow after tag/version validation and before application deployment. It preserves the current scanner state, installs `infra/aws/scanner-switch.yml`, verifies `ControlPlaneRevision` and exercises the expected edge state. A failure blocks the application deploy and GitHub Release.
 
-To resume a failed control-plane migration after correcting an external AWS condition, first confirm the failed job reports `Previous scanner control plane restored and verified`. If it reports a `CRITICAL` rollback failure, keep or place the scanner in the disabled state and inspect CloudFormation events before proceeding. Then use **Re-run failed jobs** on the same immutable release run. Never move or recreate the tag.
+v0.4.11 requires the v0.4.10 control-plane revision to be installed. For an environment on v0.4.9 or earlier, install v0.4.10 first; do not bypass the missing-revision refusal.
+
+To resume a failed control-plane migration after correcting an external AWS condition, first confirm the job reports either `Previous scanner control plane restored and verified`, `Previous scanner control plane was restored and verified by CloudFormation`, or a rejection-before-mutation followed by verification of the unchanged revision. If it reports any `CRITICAL` outcome—especially an unknown terminal state—inspect `describe-stacks` and the token-correlated `describe-stack-events` output until CloudFormation is terminal before running any switch or upgrade workflow. Then use **Re-run failed jobs** on the same immutable release run. Never move or recreate the tag.
 
 Every release also parses the complete template and asserts both WAF branches: enabled must count exact scan admission so application validation remains reachable; disabled must block exact `POST /v1/scans` with the versioned JSON/CORS/no-store contract. Live upgrade verification exercises only the preserved operational state so an emergency-disabled scanner is never enabled automatically.
 
