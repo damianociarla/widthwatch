@@ -1,5 +1,15 @@
 # Migration notes
 
+## v0.4.8
+
+This patch hardens the GitHub/AWS supply chain without changing report schema, sampling protocol or capture protocol. Existing baselines compatible with v0.4.0–v0.4.7 remain compatible with v0.4.8.
+
+Emergency disable no longer reads the operational email secret; enable remains gated by both confirmed regional SNS subscriptions. The ordinary deploy role loses every switch mutation capability—including change-set execution—and retains only `DescribeStacks`. New installations bootstrap the disabled switch once through the dedicated control-plane execution role before an application deploy is allowed. A dedicated `widthwatch-canary` OIDC role can only describe the switch state, and the canary opens or updates one GitHub incident when the public path fails, then closes it after recovery.
+
+All GitHub Actions are pinned to full commit SHAs and Dependabot maintains those references. Repository settings require pinned selected actions, protect `main` with pull requests and both Node CI jobs, protect immutable `v*` release tags, and restrict deployment environments to their intended branch or tag patterns. Existing installations must update `scanner-switch-iam.yml`, set its `CanaryRoleArn` output as `AWS_CANARY_ROLE_ARN` in the `monitoring` environment, and apply the versioned GitHub supply-chain runbook before enabling the scheduled canary.
+
+The hosted landing now distinguishes a paused public scanner and unavailable accepted results from admission rejection.
+
 ## v0.4.7
 
 This patch separates emergency scan admission from application deployment without changing report schema, sampling protocol or capture protocol. Existing baselines compatible with v0.4.0–v0.4.6 remain compatible with v0.4.7.

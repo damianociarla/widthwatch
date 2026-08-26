@@ -3,7 +3,6 @@ set -euo pipefail
 : "${AWS_ACCOUNT_ID:?Set AWS_ACCOUNT_ID}"
 : "${AWS_ECR_ACCESS_ROLE_ARN:?Set AWS_ECR_ACCESS_ROLE_ARN}"
 : "${AWS_CLOUDFORMATION_ROLE_ARN:?Set AWS_CLOUDFORMATION_ROLE_ARN}"
-: "${AWS_SCANNER_SWITCH_EXECUTION_ROLE_ARN:?Set AWS_SCANNER_SWITCH_EXECUTION_ROLE_ARN}"
 : "${WIDTHWATCH_ORIGIN_VERIFY_TOKEN:?Set WIDTHWATCH_ORIGIN_VERIFY_TOKEN}"
 : "${WIDTHWATCH_BUDGET_ALERT_EMAIL:?Set WIDTHWATCH_BUDGET_ALERT_EMAIL}"
 aws_region="${AWS_REGION:-eu-west-1}"
@@ -11,8 +10,8 @@ tag="${WIDTHWATCH_IMAGE_TAG:-latest}"
 repository="widthwatch-api"
 registry="${AWS_ACCOUNT_ID}.dkr.ecr.${aws_region}.amazonaws.com"
 if ! aws cloudformation describe-stacks --region us-east-1 --stack-name widthwatch-scanner-switch >/dev/null 2>&1; then
-  echo "Bootstrapping the independent scanner switch in its fail-closed disabled state."
-  aws cloudformation deploy --region us-east-1 --stack-name widthwatch-scanner-switch --template-file infra/aws/scanner-switch.yml --role-arn "$AWS_SCANNER_SWITCH_EXECUTION_ROLE_ARN"
+  echo "The independent widthwatch-scanner-switch stack is absent. Bootstrap it disabled before deploying the application." >&2
+  exit 1
 fi
 scanner_switch_arn="$(aws cloudformation describe-stacks --region us-east-1 --stack-name widthwatch-scanner-switch --query "Stacks[0].Outputs[?OutputKey=='RuleGroupArn'].OutputValue|[0]" --output text)"
 if [[ -z "$scanner_switch_arn" || "$scanner_switch_arn" == "None" ]]; then

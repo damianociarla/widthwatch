@@ -44,6 +44,10 @@ A sanitized refusal before a hosted job exists. It records only a stable capacit
 
 The fail-closed emergency boundary for public scan admission. A dedicated WAF rule group owns only exact `POST /v1/scans`; its switch-only stack and least-privilege workflow are independent of image publication, App Runner and ordinary edge deployments. Disable never depends on alerting. Enable requires confirmed regional alert subscriptions.
 
+## Operational canary
+
+The scheduled external observer of the hosted public path. It may read the expected scanner-control state and exercise public HTTP endpoints, but it cannot mutate AWS resources. One open GitHub incident represents a continuing failure and is closed only after a successful recovery run.
+
 ## Public report link
 
 The bearer URL for one hosted standalone report. S3 storage remains private, but anyone who has the unguessable application URL can open the report until it expires. The report can reproduce page title, URL, screenshots and visible content, so no secrecy is promised and indexing is explicitly discouraged at the HTTP boundary.

@@ -38,7 +38,7 @@ set -euo pipefail
   return { directory, log };
 }
 
-function run(directory, state) {
+function run(directory, state, alertEmail = "alerts@example.com") {
   return spawnSync("bash", [script], {
     encoding: "utf8",
     env: {
@@ -46,14 +46,14 @@ function run(directory, state) {
       PATH: `${directory}:${process.env.PATH}`,
       WIDTHWATCH_SCANNER_STATE: state,
       WIDTHWATCH_SCANNER_SWITCH_EXECUTION_ROLE_ARN: "arn:aws:iam::123:role/switch-execution",
-      WIDTHWATCH_ALERT_EMAIL: "alerts@example.com",
+      ...(alertEmail ? { WIDTHWATCH_ALERT_EMAIL: alertEmail } : {}),
     },
   });
 }
 
 test("scanner disable bypasses alert readiness and updates only its dedicated stack", async (t) => {
   const fixture = await fakeTools(t, "PendingConfirmation");
-  const result = run(fixture.directory, "disable");
+  const result = run(fixture.directory, "disable", "");
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /health=200, POST \/v1\/scans=403/);
   const calls = await readFile(fixture.log, "utf8");

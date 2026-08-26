@@ -131,16 +131,16 @@ See [architecture](docs/architecture.md), [OpenAPI](docs/openapi.yml), [security
 
 ## Deployment bootstrap
 
-1. Deploy `infra/aws/github-deploy-role.yml`, then the independent `infra/aws/scanner-switch-iam.yml`, reusing the account-level GitHub OIDC provider. Existing installations can add only the switch IAM stack; it attaches the narrow bootstrap policy to the existing deploy role without recreating App Runner roles.
-2. Configure protected GitHub environment `production`.
-3. Add repository variables `AWS_ACCOUNT_ID`, `AWS_DEPLOY_ROLE_ARN`, `AWS_CLOUDFORMATION_ROLE_ARN`, `AWS_ECR_ACCESS_ROLE_ARN`, `AWS_INSTANCE_ROLE_ARN`, `AWS_SCANNER_SWITCH_ROLE_ARN`, `AWS_SCANNER_SWITCH_EXECUTION_ROLE_ARN`, and `VITE_API_URL`.
+1. Deploy `infra/aws/github-deploy-role.yml`, then the independent `infra/aws/scanner-switch-iam.yml`, reusing the account-level GitHub OIDC provider. Existing installations can update only the switch IAM stack; it gives the application deploy role read-only access to scanner state without recreating App Runner roles.
+2. Apply the [GitHub supply-chain runbook](docs/runbooks/github-supply-chain.md): protect `main` and `v*`, restrict actions to pinned selected references, and configure the `production` and read-only `monitoring` environments.
+3. Add repository variables `AWS_ACCOUNT_ID`, `AWS_DEPLOY_ROLE_ARN`, `AWS_CLOUDFORMATION_ROLE_ARN`, `AWS_ECR_ACCESS_ROLE_ARN`, `AWS_INSTANCE_ROLE_ARN`, `AWS_SCANNER_SWITCH_ROLE_ARN`, `AWS_SCANNER_SWITCH_EXECUTION_ROLE_ARN`, `AWS_CANARY_ROLE_ARN`, and `VITE_API_URL`.
 4. Add `WIDTHWATCH_ORIGIN_VERIFY_TOKEN` and `WIDTHWATCH_BUDGET_ALERT_EMAIL` as environment secrets. Deployment fails closed when alert routing is absent.
-5. Run the first API deploy. It bootstraps the independent scanner switch as disabled, then creates the API, alert topics and edge reference.
+5. Bootstrap `infra/aws/scanner-switch.yml` once in us-east-1 with its default disabled parameter and the dedicated switch execution role. The application deploy refuses to run while this stack is absent and can only read its ARN.
 6. Confirm both regional SNS email subscriptions, then explicitly enable admission with the [scanner switch runbook](docs/runbooks/public-scanner.md). There is no enabled fallback.
 7. Configure npm trusted publishing for repository `damianociarla/widthwatch`, workflow `release.yml`, environment `production`.
 8. Enable GitHub Pages with GitHub Actions as its source.
 
-A `v*` tag validates, deploys the API, publishes npm and creates the GitHub Release. Pushes to `main` publish the website. AWS credentials are short-lived through GitHub OIDC; npm trusted publishing also uses OIDC and emits provenance.
+A `v*` tag validates, deploys the API, publishes npm and creates the GitHub Release. Merges to protected `main` publish the website. Actions are pinned to full SHAs and maintained by Dependabot. AWS credentials are short-lived through GitHub OIDC; the scheduled canary assumes a separate read-only role, while npm trusted publishing also uses OIDC and emits provenance.
 
 The `Deploy API` workflow can bootstrap or redeploy only the hosted scanner without publishing an npm release.
 

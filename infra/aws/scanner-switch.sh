@@ -3,10 +3,12 @@ set -euo pipefail
 
 : "${WIDTHWATCH_SCANNER_STATE:?Set WIDTHWATCH_SCANNER_STATE to enable or disable}"
 : "${WIDTHWATCH_SCANNER_SWITCH_EXECUTION_ROLE_ARN:?Set WIDTHWATCH_SCANNER_SWITCH_EXECUTION_ROLE_ARN}"
-: "${WIDTHWATCH_ALERT_EMAIL:?Set WIDTHWATCH_ALERT_EMAIL}"
 
 case "$WIDTHWATCH_SCANNER_STATE" in
-  enable) desired="true" ;;
+  enable)
+    desired="true"
+    : "${WIDTHWATCH_ALERT_EMAIL:?Set WIDTHWATCH_ALERT_EMAIL}"
+    ;;
   disable) desired="false" ;;
   *) echo "WIDTHWATCH_SCANNER_STATE must be enable or disable." >&2; exit 2 ;;
 esac

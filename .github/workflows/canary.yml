@@ -7,13 +7,13 @@ concurrency: { group: widthwatch-public-canary, cancel-in-progress: false }
 jobs:
   canary:
     runs-on: ubuntu-latest
-    environment: production
+    environment: monitoring
     timeout-minutes: 4
-    permissions: { id-token: write }
+    permissions: { id-token: write, issues: write }
     steps:
-      - uses: aws-actions/configure-aws-credentials@v6
+      - uses: aws-actions/configure-aws-credentials@451ce2a72e8d729a59ebeaacab82dbce58e7af4c # v6
         with:
-          role-to-assume: ${{ vars.AWS_SCANNER_SWITCH_ROLE_ARN }}
+          role-to-assume: ${{ vars.AWS_CANARY_ROLE_ARN }}
           aws-region: us-east-1
           allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
       - name: Verify health, scan, status and report policy
@@ -41,3 +41,33 @@ jobs:
           test "$status" = complete
           headers="$(curl --retry 2 --max-time 15 --silent --show-error --dump-header - --output /dev/null "$API_URL/v1/reports/$id")"
           grep -Eiq '^x-robots-tag: noindex, nofollow, noarchive' <<<"$headers"
+      - name: Open or update the operational canary incident
+        if: ${{ failure() }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="Public scanner canary is failing"
+          number="$(gh issue list --state open --limit 100 --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -n 1)"
+          body="The hourly public scanner canary failed. No target URL or response content is included. Run: $RUN_URL"
+          if [[ -n "$number" ]]; then
+            gh issue comment "$number" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body"
+          fi
+      - name: Resolve the operational canary incident after recovery
+        if: ${{ success() }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          title="Public scanner canary is failing"
+          number="$(gh issue list --state open --limit 100 --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -n 1)"
+          if [[ -n "$number" ]]; then
+            gh issue close "$number" --comment "The public scanner canary has recovered."
+          fi

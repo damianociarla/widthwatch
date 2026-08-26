@@ -13,7 +13,7 @@ aws cloudformation describe-stacks \
   --query "Stacks[0].[StackStatus,Parameters[?ParameterKey=='PublicScannerEnabled'].ParameterValue|[0],Outputs[?OutputKey=='PublicScannerStatus'].OutputValue|[0]]"
 ```
 
-`false` / `DISABLED` is the cold-bootstrap default. An absent stack is not an enabled state; run the ordinary API bootstrap, which creates the switch disabled before building the application.
+`false` / `DISABLED` is the cold-bootstrap default. An absent stack is not an enabled state; bootstrap the dedicated stack before the first application deploy. The application role has read-only access and refuses to deploy while the stack is absent.
 
 ## Dispatch an exact switch run
 
@@ -77,7 +77,8 @@ Run the dispatch block with `state=enable`. Re-run the independent requests with
 ## Cold bootstrap order
 
 1. Deploy the additive `scanner-switch-iam.yml` stack containing the dedicated scanner switch and execution roles; existing application roles are not replaced.
-2. Run the first API deploy. It creates `widthwatch-scanner-switch` with `PublicScannerEnabled=false`, then creates the API/alerts and the edge reference.
-3. Confirm both SNS email subscriptions.
-4. Dispatch `state=enable` explicitly.
-5. Verify the hourly canary and alarms before treating the public scanner as operational.
+2. Using bootstrap administrator credentials, deploy `infra/aws/scanner-switch.yml` in us-east-1 with the dedicated switch execution role and its default `PublicScannerEnabled=false` parameter.
+3. Run the first API deploy. It verifies the disabled switch exists, then creates the API/alerts and the edge reference without receiving switch mutation permissions.
+4. Confirm both SNS email subscriptions.
+5. Dispatch `state=enable` explicitly.
+6. Verify the hourly canary and alarms before treating the public scanner as operational.
