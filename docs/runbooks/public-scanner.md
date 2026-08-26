@@ -1,6 +1,6 @@
 # Public scanner incident runbook
 
-The public scanner switch is an independent, fail-closed WAF rule group. `scanner-switch.yml` updates only its dedicated CloudFormation stack; it never builds an image, publishes to ECR, updates App Runner, deploys the ordinary edge stack or reads an unreleased application artifact.
+The public scanner switch is an independent, fail-closed WAF rule group. The operational `scanner-switch.yml` workflow changes only scanner state using the previously installed template; it never builds an image, publishes to ECR, updates App Runner or deploys the ordinary edge stack. The release-called `upgrade-scanner-switch.yml` workflow is the only normal path that installs the complete versioned control-plane template.
 
 The rule blocks exact `POST /v1/scans`. Health, status and existing public report links remain available. Disable does not depend on SNS. Enable requires the expected email to have a confirmed subscription on both regional alert topics.
 
@@ -10,10 +10,12 @@ The rule blocks exact `POST /v1/scans`. Health, status and existing public repor
 aws cloudformation describe-stacks \
   --region us-east-1 \
   --stack-name widthwatch-scanner-switch \
-  --query "Stacks[0].[StackStatus,Parameters[?ParameterKey=='PublicScannerEnabled'].ParameterValue|[0],Outputs[?OutputKey=='PublicScannerStatus'].OutputValue|[0]]"
+  --query "Stacks[0].[StackStatus,Parameters[?ParameterKey=='PublicScannerEnabled'].ParameterValue|[0],Outputs[?OutputKey=='PublicScannerStatus'].OutputValue|[0],Outputs[?OutputKey=='ControlPlaneRevision'].OutputValue|[0]]"
 ```
 
 `false` / `DISABLED` is the cold-bootstrap default. An absent stack is not an enabled state; bootstrap the dedicated stack before the first application deploy. The application role has read-only access and refuses to deploy while the stack is absent.
+
+`ControlPlaneRevision` is `bootstrap` until the first protected release upgrade, then becomes the SHA-256 digest of the installed template. A successful release summary records the same digest and preserved state. Do not update the full template with the operational toggle workflow or an ordinary application deploy.
 
 ## Dispatch an exact switch run
 
@@ -55,7 +57,13 @@ curl --output /dev/null --silent --write-out '%{http_code}\n' \
   https://d35vhnded4ly3z.cloudfront.net/v1/scans
 ```
 
-Expected results: health `200`; scan admission `403`. Do not run an application deploy to operate the switch. A normal release reads the dedicated rule-group ARN but cannot change its enabled parameter.
+Expected results: health `200`; scan admission `403` with JSON error `scanner_paused`, `Access-Control-Allow-Origin: https://damianociarla.github.io` and `Cache-Control: no-store`. Do not run an application deploy to operate the switch. A normal application deploy reads the dedicated rule-group ARN but cannot change its enabled parameter.
+
+## Upgrade the versioned template
+
+Do not dispatch a separate mutable ref. A `vX.Y.Z` release calls `upgrade-scanner-switch.yml` as a reusable workflow after tag/version validation and before application deployment. It preserves the current scanner state, installs `infra/aws/scanner-switch.yml`, verifies `ControlPlaneRevision` and exercises the expected edge state. A failure blocks the application deploy and GitHub Release.
+
+To resume a failed control-plane migration after correcting an external AWS condition, use **Re-run failed jobs** on the same immutable release run. Never move or recreate the tag.
 
 ## Inspect alert readiness
 

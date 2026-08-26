@@ -38,15 +38,21 @@ fi
 
 current="$(aws cloudformation describe-stacks --region us-east-1 --stack-name widthwatch-scanner-switch \
   --query "Stacks[0].Parameters[?ParameterKey=='PublicScannerEnabled'].ParameterValue|[0]" --output text)"
+control_plane_revision="$(aws cloudformation describe-stacks --region us-east-1 --stack-name widthwatch-scanner-switch \
+  --query "Stacks[0].Parameters[?ParameterKey=='ControlPlaneRevision'].ParameterValue|[0]" --output text)"
 
 update_switch() {
   local value="$1"
+  local parameters=("ParameterKey=PublicScannerEnabled,ParameterValue=$value")
+  if [[ "$control_plane_revision" != "None" && -n "$control_plane_revision" ]]; then
+    parameters+=("ParameterKey=ControlPlaneRevision,UsePreviousValue=true")
+  fi
   aws cloudformation update-stack \
     --region us-east-1 \
     --stack-name widthwatch-scanner-switch \
     --use-previous-template \
     --role-arn "$WIDTHWATCH_SCANNER_SWITCH_EXECUTION_ROLE_ARN" \
-    --parameters "ParameterKey=PublicScannerEnabled,ParameterValue=$value" >/dev/null
+    --parameters "${parameters[@]}" >/dev/null
   aws cloudformation wait stack-update-complete --region us-east-1 --stack-name widthwatch-scanner-switch
 }
 
@@ -57,23 +63,12 @@ fi
 api_url="$(stack_output us-east-1 widthwatch-edge ApiUrl)"
 api_url="${api_url%/}"
 
-verify_edge() {
-  local expected_scan="$1" health scan
-  health="$(curl --max-time 15 --output /dev/null --silent --show-error --write-out '%{http_code}' "$api_url/health" || true)"
-  scan="$(curl --max-time 15 --output /dev/null --silent --show-error --write-out '%{http_code}' \
-    --header 'content-type: application/json' --data '{"url":123}' "$api_url/v1/scans" || true)"
-  [[ "$health" == "200" && "$scan" == "$expected_scan" ]]
-}
-
-expected_scan="403"
-[[ "$desired" == "true" ]] && expected_scan="400"
-for _ in {1..24}; do
-  if verify_edge "$expected_scan"; then
-    echo "Scanner $WIDTHWATCH_SCANNER_STATE verified: health=200, POST /v1/scans=$expected_scan."
-    exit 0
-  fi
-  sleep 5
-done
+expected_state="disabled"
+[[ "$desired" == "true" ]] && expected_state="enabled"
+script_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if "$script_directory/verify-scanner-edge.sh" "$expected_state" "$api_url"; then
+  exit 0
+fi
 
 if [[ "$desired" == "true" ]]; then
   echo "Enable verification failed; restoring the fail-closed disabled state." >&2

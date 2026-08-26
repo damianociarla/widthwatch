@@ -44,6 +44,10 @@ A sanitized refusal before a hosted job exists. It records only a stable capacit
 
 The fail-closed emergency boundary for public scan admission. A dedicated WAF rule group owns only exact `POST /v1/scans`; its switch-only stack and least-privilege workflow are independent of image publication, App Runner and ordinary edge deployments. Disable never depends on alerting. Enable requires confirmed regional alert subscriptions. Edge refusals preserve the public HTTP contract with explicit JSON status, landing-origin CORS and no-store semantics.
 
+## Control-plane revision
+
+The SHA-256 identity of the versioned scanner-control template installed by a protected release. A control-plane upgrade replaces the full CloudFormation template, preserves `PublicScannerEnabled` exactly and verifies the installed revision plus the edge contract. The operational switch changes only admission state with the previously installed template and revision.
+
 ## Operational canary
 
 The scheduled external observer of the hosted public path. It may read the expected scanner-control state and exercise public HTTP endpoints, but it cannot mutate AWS resources. One open GitHub incident represents a continuing failure and is closed only after a successful recovery run.

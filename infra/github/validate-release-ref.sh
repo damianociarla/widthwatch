@@ -5,7 +5,7 @@ release_tag="${1:-}"
 event_sha="${2:-}"
 
 if [[ ! "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "Release refs must be stable semantic-version tags such as v0.4.9." >&2
+  echo "Release refs must be stable semantic-version tags such as v1.2.3." >&2
   exit 1
 fi
 
@@ -29,5 +29,8 @@ if ! git show-ref --verify --quiet refs/remotes/origin/main || ! git merge-base 
   echo "Release tag $release_tag is not connected to origin/main." >&2
   exit 1
 fi
+
+script_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+node "$script_directory/validate-release-version.mjs" "$release_tag"
 
 echo "Release ref verified: $release_tag -> $resolved_sha"

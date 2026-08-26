@@ -1,7 +1,8 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Fail-closed WidthWatch public scanner control plane (bootstrap once in us-east-1)
+Description: Versioned fail-closed WidthWatch public scanner control plane in us-east-1
 Parameters:
   PublicScannerEnabled: { Type: String, Default: "false", AllowedValues: ["true", "false"] }
+  ControlPlaneRevision: { Type: String, Default: bootstrap, AllowedPattern: "^(bootstrap|[a-f0-9]{64})$" }
 Conditions:
   ScannerEnabled: !Equals [!Ref PublicScannerEnabled, "true"]
 Resources:
@@ -52,3 +53,4 @@ Outputs:
   RuleGroupId: { Value: !GetAtt ScannerSwitchRuleGroup.Id }
   RuleGroupName: { Value: widthwatch-scanner-switch }
   PublicScannerStatus: { Value: !If [ScannerEnabled, ENABLED, DISABLED] }
+  ControlPlaneRevision: { Value: !Ref ControlPlaneRevision }

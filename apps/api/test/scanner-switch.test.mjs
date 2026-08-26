@@ -22,6 +22,7 @@ case "$*" in
   *EdgeAlertTopicArn*) printf '%s\n' 'arn:aws:sns:us-east-1:123:widthwatch-edge-operational-alerts' ;;
   *ApiUrl*) printf '%s\n' 'https://api.example' ;;
   *PublicScannerEnabled*) printf '%s\n' 'true' ;;
+  *ControlPlaneRevision*) printf '%s\n' 'fixture-revision' ;;
   *) : ;;
 esac
 `,
@@ -30,7 +31,23 @@ esac
     join(directory, "curl"),
     `#!/usr/bin/env bash
 set -euo pipefail
-[[ "$*" == *'/health'* ]] && printf 200 || printf 403
+arguments="$*"
+output=/dev/null
+headers=/dev/null
+while (($#)); do
+  case "$1" in
+    --output) output="$2"; shift 2 ;;
+    --dump-header) headers="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+if [[ "$arguments" == *'/health'* ]]; then
+  printf 200
+else
+  printf '%s\n' 'HTTP/2 403' 'content-type: application/json' 'access-control-allow-origin: https://damianociarla.github.io' 'cache-control: no-store' >"$headers"
+  printf '%s\n' '{"error":"scanner_paused"}' >"$output"
+  printf 403
+fi
 `,
   );
   await Promise.all([chmod(join(directory, "aws"), 0o755), chmod(join(directory, "curl"), 0o755)]);
@@ -55,7 +72,7 @@ test("scanner disable bypasses alert readiness and updates only its dedicated st
   const fixture = await fakeTools(t, "PendingConfirmation");
   const result = run(fixture.directory, "disable", "");
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /health=200, POST \/v1\/scans=403/);
+  assert.match(result.stdout, /scan=403, JSON\/CORS\/no-store present/);
   const calls = await readFile(fixture.log, "utf8");
   assert.match(calls, /update-stack .*widthwatch-scanner-switch/);
   assert.doesNotMatch(calls, /apprunner|ecr|widthwatch-api.*update-stack/);

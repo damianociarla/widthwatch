@@ -22,7 +22,7 @@ test("landing exposes the scanner, docs and published package command", async ()
   assert.match(html, /Screenshots and reports are retained for 7 days/);
   assert.match(html, /anyone who has the report link/);
   assert.match(html, /npx widthwatch init/);
-  assert.match(html, /softwareVersion":"0\.4\.9/);
+  assert.match(html, /softwareVersion":"0\.4\.10/);
   assert.match(html, /id="navToggle"/);
   assert.match(html, /Reproducible evidence/);
   assert.match(html, /href="\.\/proof\.html"/);

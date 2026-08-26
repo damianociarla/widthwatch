@@ -1,0 +1,26 @@
+name: Upgrade public scanner control plane
+on:
+  workflow_call:
+permissions: {}
+concurrency: { group: widthwatch-scanner-switch, cancel-in-progress: false }
+jobs:
+  upgrade:
+    runs-on: ubuntu-latest
+    environment: production
+    permissions: { contents: read, id-token: write }
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with: { ref: "${{ github.sha }}", fetch-depth: 0 }
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with: { node-version: 24, package-manager-cache: false }
+      - name: Verify immutable release ref and version contract
+        run: ./infra/github/validate-release-ref.sh "$GITHUB_REF_NAME" "$GITHUB_SHA"
+      - uses: aws-actions/configure-aws-credentials@451ce2a72e8d729a59ebeaacab82dbce58e7af4c # v6
+        with:
+          role-to-assume: ${{ vars.AWS_SCANNER_SWITCH_ROLE_ARN }}
+          aws-region: us-east-1
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+      - name: Install and verify the versioned control-plane template
+        run: ./infra/aws/upgrade-scanner-switch.sh
+        env:
+          WIDTHWATCH_SCANNER_SWITCH_EXECUTION_ROLE_ARN: ${{ vars.AWS_SCANNER_SWITCH_EXECUTION_ROLE_ARN }}
