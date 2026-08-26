@@ -96,3 +96,9 @@ jobs:
             gh release create "$RELEASE_TAG" --verify-tag --generate-notes --title "WidthWatch $RELEASE_TAG" --notes "Before upgrading, review the [versioned migration notes](https://github.com/${{ github.repository }}/blob/$RELEASE_TAG/docs/migrations.md)."
           fi
         env: { GH_TOKEN: "${{ github.token }}" }
+  deploy-pages:
+    needs: github-release
+    permissions: { contents: read, pages: write, id-token: write }
+    uses: ./.github/workflows/pages.yml
+    with:
+      release_tag: ${{ github.ref_name }}

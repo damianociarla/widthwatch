@@ -4,11 +4,15 @@
 
 This patch makes scanner control-plane upgrades transactional without changing report schema, sampling protocol or capture protocol. Existing baselines compatible with v0.4.0–v0.4.10 remain compatible with v0.4.11.
 
-Before installing a candidate template, the release now captures the live CloudFormation template, `PublicScannerEnabled` value and `ControlPlaneRevision`. If state, revision or edge verification fails after installation, the release restores the captured template and parameters, verifies the restored edge contract and remains failed. A rollback that cannot be applied or verified is reported as a critical operational failure rather than being hidden by the original candidate error.
+Before installing a candidate template, the release now captures the live CloudFormation template, `PublicScannerEnabled` value and `ControlPlaneRevision`. Every accepted update receives a unique client request token and is resolved from its root stack events plus `StackStatus`; a local observation failure can no longer be mistaken for a rejected update. Rejected operations, successful installs, completed automatic rollbacks, failed terminal states and unresolved in-progress states remain distinct. An unresolved accepted operation is critical and never starts an overlapping rollback.
 
-The narrow scanner switch role gains only `cloudformation:GetTemplate` on its existing dedicated stack. Apply the additive `infra/aws/scanner-switch-iam.yml` update before the first v0.4.11 release; no application runtime permission changes. The release reusable workflow no longer inherits caller secrets, and the canary removes its complete temporary response directory.
+If state, revision or edge verification fails after a confirmed installation, the release restores the captured template and parameters, verifies the restored edge contract and remains failed. A rollback that cannot be applied or verified is reported as a critical operational failure rather than being hidden by the original candidate error.
+
+The narrow scanner switch role gains only `cloudformation:GetTemplate` on its existing dedicated stack. Apply the additive `infra/aws/scanner-switch-iam.yml` update before the first v0.4.11 release; no application runtime permission changes. A v0.4.11 upgrade requires the v0.4.10 control-plane revision to be installed already. Install v0.4.10 first when upgrading an environment from v0.4.9 or earlier; the transactional snapshot intentionally refuses a legacy stack without a revision. The release reusable workflow no longer inherits caller secrets, and the canary removes its complete temporary response directory.
 
 Every release now parses `scanner-switch.yml` and evaluates both enabled and disabled WAF contracts. Live verification continues to exercise only the preserved state, so a scanner disabled during an incident is never enabled automatically for testing.
+
+GitHub Pages no longer deploys from mutable `main`. The release workflow deploys the site only after the stable GitHub Release exists, checking out and validating that exact tag. Manual recovery also requires the tag of an existing non-draft, non-prerelease GitHub Release.
 
 ## v0.4.10
 

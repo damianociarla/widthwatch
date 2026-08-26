@@ -177,6 +177,11 @@ test("release installs the versioned scanner control-plane template before appli
   assert.match(upgrade, /verify_control_plane .*rollback/);
   assert.match(upgrade, /ParameterKey=PublicScannerEnabled,ParameterValue=\$state/);
   assert.match(upgrade, /ParameterKey=ControlPlaneRevision,ParameterValue=\$control_plane_revision/);
+  assert.match(upgrade, /--client-request-token "\$token"/);
+  assert.match(upgrade, /cloudformation describe-stack-events/);
+  assert.match(upgrade, /StackStatus/);
+  assert.doesNotMatch(upgrade, /cloudformation wait/);
+  assert.match(upgrade, /no overlapping rollback was attempted/);
   assert.match(upgrade, /installed_state.*current_state/);
   assert.match(upgrade, /installed_revision.*revision/);
   assert.match(verification, /scanner_paused/);
@@ -186,6 +191,23 @@ test("release installs the versioned scanner control-plane template before appli
     const result = spawnSync("bash", ["-n", `${root}/${path}`], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr);
   }
+});
+
+test("Pages deploys only an existing stable GitHub Release and never mutable main", async () => {
+  const pages = await source(".github/workflows/pages.yml");
+  const release = await source(".github/workflows/release.yml");
+  assert.doesNotMatch(pages, /push:\s*\{\s*branches:\s*\[main\]/);
+  assert.match(pages, /workflow_call:/);
+  assert.match(pages, /workflow_dispatch:/);
+  assert.match(pages, /release_tag:\s*\{ required: true, type: string \}/);
+  assert.match(pages, /ref: "\$\{\{ env\.RELEASE_TAG \}\}"/);
+  assert.match(pages, /validate-release-ref\.sh/);
+  assert.match(pages, /gh release view "\$RELEASE_TAG" --json isDraft,isPrerelease/);
+  assert.match(pages, /"false:false"/);
+  assert.match(release, /deploy-pages:/);
+  assert.match(release, /needs: github-release/);
+  assert.match(release, /uses: \.\/\.github\/workflows\/pages\.yml/);
+  assert.match(release, /release_tag: \$\{\{ github\.ref_name \}\}/);
 });
 
 test("the scheduled canary crosses the expected public path", async () => {
