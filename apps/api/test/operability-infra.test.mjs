@@ -83,9 +83,10 @@ test("application deploy requires a fail-closed bootstrap and cannot mutate scan
   assert.equal(syntax.status, 0, syntax.stderr);
 });
 
-test("release only accepts an immutable semantic-version tag connected to main", async (t) => {
+test("release accepts only the latest immutable semantic-version tag connected to main", async (t) => {
   const workflow = await source(".github/workflows/release.yml");
   const validator = `${root}/infra/github/validate-release-ref.sh`;
+  const latestValidator = `${root}/infra/github/validate-latest-release-tag.mjs`;
   const packageVersion = JSON.parse(await source("package.json")).version;
   const validTag = `v${packageVersion}`;
   assert.match(workflow, /workflow_dispatch:/);
@@ -94,6 +95,9 @@ test("release only accepts an immutable semantic-version tag connected to main",
   assert.match(workflow, /ref: "\$\{\{ env\.RELEASE_TAG \}\}"/);
   assert.doesNotMatch(workflow, /ref: "\$\{\{ github\.sha \}\}"/);
   assert.match(workflow, /validate-release-ref\.sh/);
+  assert.match(workflow, /DISPATCH_REF: \$\{\{ github\.ref \}\}/);
+  assert.match(workflow, /"\$DISPATCH_REF" == "refs\/heads\/main"/);
+  assert.match(workflow, /validate-latest-release-tag\.mjs "\$RELEASE_TAG"/);
 
   const directory = await mkdtemp(join(tmpdir(), "widthwatch-release-ref-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -106,6 +110,9 @@ test("release only accepts an immutable semantic-version tag connected to main",
   assert.equal(git("commit", "-m", "main").status, 0);
   const mainSha = git("rev-parse", "HEAD").stdout.trim();
   assert.equal(git("update-ref", "refs/remotes/origin/main", mainSha).status, 0);
+  const historicalTag = "v0.0.0";
+  assert.notEqual(validTag, historicalTag);
+  assert.equal(git("tag", "-a", historicalTag, "-m", "historical").status, 0);
   assert.equal(git("tag", "-a", validTag, "-m", "valid").status, 0);
 
   const run = (tag, sha, extraEnvironment = {}) =>
@@ -120,12 +127,18 @@ test("release only accepts an immutable semantic-version tag connected to main",
       },
     });
   assert.equal(run(validTag, mainSha).status, 0);
+  const runLatest = (tag) => spawnSync(process.execPath, [latestValidator, tag], { cwd: directory, encoding: "utf8" });
+  assert.equal(runLatest(validTag).status, 0);
+  const historicalRecovery = runLatest(historicalTag);
+  assert.notEqual(historicalRecovery.status, 0);
+  assert.match(historicalRecovery.stderr, /refuses historical tag/);
   assert.notEqual(run("main", mainSha).status, 0);
   assert.notEqual(run(mainSha, mainSha).status, 0);
   assert.equal(git("tag", "-a", "v9.9.9", "-m", "wrong version").status, 0);
   const versionMismatch = run("v9.9.9", mainSha);
   assert.notEqual(versionMismatch.status, 0);
   assert.match(versionMismatch.stderr, /Release version mismatch/);
+  assert.equal(git("tag", "-d", "v9.9.9").status, 0);
 
   assert.equal(git("switch", "-c", "feature").status, 0);
   await writeFile(join(directory, "fixture.txt"), "feature\n");
@@ -133,6 +146,7 @@ test("release only accepts an immutable semantic-version tag connected to main",
   const featureSha = git("rev-parse", "HEAD").stdout.trim();
   assert.equal(git("tag", "-a", "v1.2.4", "-m", "off main").status, 0);
   assert.notEqual(run("v1.2.4", featureSha).status, 0);
+  assert.equal(runLatest(validTag).status, 0);
 });
 
 test("the independent switch workflow gates enable and correlates exact runs", async () => {
@@ -220,6 +234,9 @@ test("the scheduled canary crosses the expected public path", async () => {
   assert.match(canary, /AWS_CANARY_ROLE_ARN/);
   assert.doesNotMatch(canary, /AWS_SCANNER_SWITCH_ROLE_ARN/);
   assert.match(canary, /x-robots-tag: noindex, nofollow, noarchive/i);
+  assert.match(canary, /test "\$report_status" = 200/);
+  assert.match(canary, /content-type: text\/html; charset=utf-8/i);
+  assert.match(canary, /cache-control: private, no-store/i);
   assert.match(canary, /scanner_paused/);
   assert.match(canary, /access-control-allow-origin/);
   assert.match(canary, /cache-control: no-store/);

@@ -1,5 +1,11 @@
 # Migration notes
 
+## v0.4.12
+
+Release execution is now forward-only: every run must name the highest stable semantic-version tag reachable from `origin/main`, and a manual recovery dispatch must additionally originate from protected `main`. Historical tags fail before validation grants access to production environments; rollback remains a separate, intentionally unsupported operation rather than an accidental use of recovery. The workflow graph and reusable workflow definitions come from protected `main`, which is therefore documented as part of the recovery trusted computing base even though every released source checkout comes from the immutable tag.
+
+The public canary now asserts the complete report response contract: HTTP `200`, `Content-Type: text/html; charset=utf-8`, `Cache-Control: private, no-store` and `X-Robots-Tag: noindex, nofollow, noarchive`. Header captures are normalized in temporary storage and removed on exit.
+
 ## v0.4.11
 
 This patch makes scanner control-plane upgrades transactional without changing report schema, sampling protocol or capture protocol. Existing baselines compatible with v0.4.0–v0.4.10 remain compatible with v0.4.11.

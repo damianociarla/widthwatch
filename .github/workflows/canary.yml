@@ -49,8 +49,16 @@ jobs:
             status="$(jq -r .status <<<"$response")"
           done
           test "$status" = complete
-          headers="$(curl --retry 2 --max-time 15 --silent --show-error --dump-header - --output /dev/null "$API_URL/v1/reports/$id")"
-          grep -Eiq '^x-robots-tag: noindex, nofollow, noarchive' <<<"$headers"
+          report_directory="$(mktemp -d)"
+          report_headers="$report_directory/headers"
+          normalized_report_headers="$report_directory/headers.normalized"
+          trap 'rm -r "$report_directory"' EXIT
+          report_status="$(curl --retry 2 --max-time 15 --silent --show-error --dump-header "$report_headers" --output /dev/null --write-out '%{http_code}' "$API_URL/v1/reports/$id")"
+          test "$report_status" = 200
+          tr -d '\r' <"$report_headers" >"$normalized_report_headers"
+          grep -Fxiq 'content-type: text/html; charset=utf-8' "$normalized_report_headers"
+          grep -Fxiq 'cache-control: private, no-store' "$normalized_report_headers"
+          grep -Fxiq 'x-robots-tag: noindex, nofollow, noarchive' "$normalized_report_headers"
       - name: Open or update the operational canary incident
         if: ${{ failure() }}
         shell: bash
