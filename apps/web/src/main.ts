@@ -73,6 +73,19 @@ const message = document.querySelector<HTMLElement>("#scanMessage");
 const timeline = document.querySelector<HTMLElement>("#miniTimeline");
 const reportLink = document.querySelector<HTMLAnchorElement>("#reportLink");
 const submitButton = form?.querySelector<HTMLButtonElement>('button[type="submit"]');
+type PublicFailureCode = "transfer_limit" | "request_limit" | "timeout" | "network_failure" | "browser_failure" | "internal_failure";
+type PublicJob = { id: string; status: string; error?: string; failureCode?: PublicFailureCode };
+
+function failureMessage(job: PublicJob): string {
+  const messages: Partial<Record<PublicFailureCode, string>> = {
+    transfer_limit: "This page exceeds the public demo's 75 MiB transfer limit.",
+    request_limit: "This page generates too many requests for the public demo.",
+    timeout: "This page did not become ready within the public demo's time limit.",
+    network_failure: "This page is not reachable from the public worker.",
+  };
+  return messages[job.failureCode ?? "internal_failure"] ?? `The bounded scan failed · job ${job.id.slice(0, 8)}.`;
+}
+
 let activeScan: AbortController | undefined;
 let scanRun = 0;
 form?.addEventListener("submit", async (event) => {
@@ -102,18 +115,21 @@ form?.addEventListener("submit", async (event) => {
       if (run !== scanRun) return;
       if (!response.ok)
         throw new Error(response.status === 429 ? "The public demo limit has been reached. Try the local package." : "The scan could not be accepted.");
-      const job = (await response.json()) as { id: string; status: string };
+      const job = (await response.json()) as PublicJob;
       if (run !== scanRun) return;
       state.textContent = `● ${job.status}`;
+      if (job.status === "failed") {
+        state.textContent = "● failed";
+        message.textContent = failureMessage(job);
+        return;
+      }
       message.textContent =
         job.status === "complete" ? "Scan complete. Preparing the interactive report…" : `Scan ${job.id.slice(0, 8)} accepted. Waiting for the bounded worker…`;
       for (let attempt = 0; attempt < 45; attempt += 1) {
         const statusResponse = await fetch(`${apiUrl.replace(/\/$/, "")}/v1/scans/${job.id}`, { signal: controller.signal });
         if (run !== scanRun) return;
         if (!statusResponse.ok) throw new Error("The scan result is no longer available.");
-        const result = (await statusResponse.json()) as {
-          status: string;
-          error?: string;
+        const result = (await statusResponse.json()) as PublicJob & {
           reportUrl?: string;
           report?: {
             probes?: Array<{ width: number; severities: string[] }>;
@@ -123,7 +139,11 @@ form?.addEventListener("submit", async (event) => {
         };
         if (run !== scanRun) return;
         state.textContent = `● ${result.status}`;
-        if (result.status === "failed") throw new Error(result.error ?? "The bounded scan could not complete.");
+        if (result.status === "failed") {
+          state.textContent = "● failed";
+          message.textContent = failureMessage(result);
+          return;
+        }
         if (result.status !== "complete" || !result.report) {
           message.textContent = `Scanning public page · ${Math.round((performance.now() - scanStarted) / 1_000)}s elapsed`;
           await new Promise((resolve) => window.setTimeout(resolve, 2_000));

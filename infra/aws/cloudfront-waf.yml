@@ -4,9 +4,7 @@ Parameters:
   OriginDomain: { Type: String }
   OriginVerifyToken: { Type: String, NoEcho: true }
   AlertEmail: { Type: String, AllowedPattern: "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$" }
-  PublicScannerEnabled: { Type: String, Default: "true", AllowedValues: ["true", "false"] }
-Conditions:
-  ScannerEnabled: !Equals [!Ref PublicScannerEnabled, "true"]
+  ScannerSwitchRuleGroupArn: { Type: String }
 Resources:
   WebAcl:
     Type: AWS::WAFv2::WebACL
@@ -16,23 +14,11 @@ Resources:
       DefaultAction: { Allow: {} }
       VisibilityConfig: { CloudWatchMetricsEnabled: true, MetricName: widthwatch-edge, SampledRequestsEnabled: true }
       Rules:
-        - Name: EmergencyScannerSwitch
+        - Name: ScannerControlPlane
           Priority: 0
-          Action: !If [ScannerEnabled, { Count: {} }, { Block: {} }]
-          Statement:
-            AndStatement:
-              Statements:
-                - ByteMatchStatement:
-                    FieldToMatch: { UriPath: {} }
-                    PositionalConstraint: EXACTLY
-                    SearchString: /v1/scans
-                    TextTransformations: [{ Priority: 0, Type: NONE }]
-                - ByteMatchStatement:
-                    FieldToMatch: { Method: {} }
-                    PositionalConstraint: EXACTLY
-                    SearchString: POST
-                    TextTransformations: [{ Priority: 0, Type: NONE }]
-          VisibilityConfig: { CloudWatchMetricsEnabled: true, MetricName: scanner-switch, SampledRequestsEnabled: true }
+          OverrideAction: { None: {} }
+          Statement: { RuleGroupReferenceStatement: { Arn: !Ref ScannerSwitchRuleGroupArn } }
+          VisibilityConfig: { CloudWatchMetricsEnabled: true, MetricName: scanner-control-plane, SampledRequestsEnabled: true }
         - Name: AWSCommonRules
           Priority: 1
           OverrideAction: { None: {} }
@@ -173,7 +159,7 @@ Resources:
 Outputs:
   ApiUrl: { Value: !Sub "https://${Distribution.DomainName}" }
   DistributionId: { Value: !Ref Distribution }
-  PublicScannerStatus: { Value: !If [ScannerEnabled, ENABLED, DISABLED] }
+  ScannerSwitchRuleGroupArn: { Value: !Ref ScannerSwitchRuleGroupArn }
   EdgeAlertTopicArn: { Value: !Ref EdgeAlertTopic }
   EdgeAlertSubscriptionArn: { Value: !Ref EdgeAlertSubscription }
   EdgeAlarmsConfigured: { Value: "true" }

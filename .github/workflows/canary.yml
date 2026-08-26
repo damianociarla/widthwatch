@@ -1,0 +1,43 @@
+name: Public scanner canary
+on:
+  schedule: [{ cron: "17 * * * *" }]
+  workflow_dispatch:
+permissions: {}
+concurrency: { group: widthwatch-public-canary, cancel-in-progress: false }
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 4
+    permissions: { id-token: write }
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_SCANNER_SWITCH_ROLE_ARN }}
+          aws-region: us-east-1
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+      - name: Verify health, scan, status and report policy
+        shell: bash
+        env:
+          API_URL: https://d35vhnded4ly3z.cloudfront.net
+        run: |
+          set -euo pipefail
+          test "$(curl --retry 3 --max-time 15 --silent --output /dev/null --write-out '%{http_code}' "$API_URL/health")" = 200
+          enabled="$(aws cloudformation describe-stacks --region us-east-1 --stack-name widthwatch-scanner-switch --query "Stacks[0].Parameters[?ParameterKey=='PublicScannerEnabled'].ParameterValue|[0]" --output text)"
+          if [[ "$enabled" == "false" ]]; then
+            test "$(curl --max-time 15 --silent --output /dev/null --write-out '%{http_code}' --header 'content-type: application/json' --data '{"url":123}' "$API_URL/v1/scans")" = 403
+            exit 0
+          fi
+          test "$enabled" = true
+          response="$(curl --retry 2 --max-time 70 --silent --show-error --header 'content-type: application/json' --data '{"url":"https://damianociarla.github.io/widthwatch/"}' "$API_URL/v1/scans")"
+          status="$(jq -r .status <<<"$response")"
+          id="$(jq -r .id <<<"$response")"
+          for _ in {1..15}; do
+            [[ "$status" == "complete" || "$status" == "failed" ]] && break
+            sleep 2
+            response="$(curl --retry 2 --max-time 15 --silent --show-error "$API_URL/v1/scans/$id")"
+            status="$(jq -r .status <<<"$response")"
+          done
+          test "$status" = complete
+          headers="$(curl --retry 2 --max-time 15 --silent --show-error --dump-header - --output /dev/null "$API_URL/v1/reports/$id")"
+          grep -Eiq '^x-robots-tag: noindex, nofollow, noarchive' <<<"$headers"

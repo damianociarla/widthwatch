@@ -15,7 +15,7 @@
     <meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://damianociarla.github.io/widthwatch/og-widthwatch.png" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"WidthWatch","applicationCategory":"DeveloperApplication","operatingSystem":"Node.js","softwareVersion":"0.4.6","url":"https://damianociarla.github.io/widthwatch/","downloadUrl":"https://www.npmjs.com/package/widthwatch","license":"https://opensource.org/licenses/MIT"}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"WidthWatch","applicationCategory":"DeveloperApplication","operatingSystem":"Node.js","softwareVersion":"0.4.7","url":"https://damianociarla.github.io/widthwatch/","downloadUrl":"https://www.npmjs.com/package/widthwatch","license":"https://opensource.org/licenses/MIT"}</script>
     <title>WidthWatch · Adaptive responsive regression testing</title>
   </head>
   <body>
@@ -47,9 +47,10 @@
       <section class="live" id="demo">
         <div class="section-head reveal"><p class="eyebrow">Public scanner / bounded beta</p><h2>Trace a public page.</h2><p>One URL. A controlled width range. No login, cookies, or private networks.</p></div>
         <form class="scanner" id="scanForm">
-          <p class="demo-scope"><strong>Bounded public demo · 5 adaptive samples · 75 MiB transfer cap</strong><span>Local/CI scans use the full configurable schedule.</span></p>
+          <p class="demo-scope"><strong>Bounded public demo · 5 geometry probes · up to 5 captures</strong><span>75 MiB transfer cap · Local/CI uses the full configurable schedule.</span></p>
           <label for="url">Website URL</label><div class="input-row"><input id="url" name="url" type="url" required placeholder="https://example.com" autocomplete="url"><button type="submit">Analyze <span>→</span></button></div>
           <p>By continuing, you confirm you are authorized to test this public page.</p>
+          <p class="scan-contract"><strong>Report access.</strong> Screenshots and reports are retained for 7 days and can be opened by anyone who has the report link. They may reproduce content visible on the public page.</p>
         </form>
         <div class="console" id="console" aria-live="polite">
           <div class="console-top"><span>widthwatch / browser</span><span class="ready" id="scanState">● ready</span></div>
@@ -58,7 +59,7 @@
       </section>
 
       <section class="report" id="engine">
-        <div class="report-copy reveal"><p class="eyebrow">The missing dimension</p><h2>Breakpoints are not the test.</h2><p>A bug at 853px is invisible when your suite only captures 375, 768, and 1440. WidthWatch follows layout change itself.</p><ol><li><span>01</span><b>Sample</b><p>Start with a sparse width sweep.</p></li><li><span>02</span><b>Bisect</b><p>Spend samples where geometry changes.</p></li><li><span>03</span><b>Explain</b><p>Overlay the exact element and regression.</p></li></ol></div>
+        <div class="report-copy reveal"><p class="eyebrow">The missing dimension</p><h2>Breakpoints are not the test.</h2><p>A bug at 853px is invisible when your suite only captures 375, 768, and 1440. WidthWatch follows layout change itself.</p><ol><li><span>01</span><b>Probe</b><p>Observe geometry across a sparse width sweep.</p></li><li><span>02</span><b>Bisect</b><p>Spend probes where geometry changes.</p></li><li><span>03</span><b>Capture</b><p>Record visual evidence at decisive widths.</p></li></ol></div>
         <div class="report-ui" aria-label="Sample WidthWatch report">
           <div class="ui-top"><b>sample report</b><span>18 widths · 2 errors</span></div>
           <div class="heatline"><button style="left:0%"><span>320</span></button><button style="left:18%"><span>523</span></button><button class="hot" style="left:49%"><span>853</span></button><button style="left:71%"><span>1040</span></button><button style="left:100%"><span>1440</span></button></div>
@@ -73,10 +74,10 @@
       </section>
 
       <section class="integration">
-        <p class="eyebrow">One engine. Three surfaces.</p><div class="integration-row"><article><span>01</span><h3>Typed API</h3><p>Use report objects directly in your TypeScript tooling.</p><code>scanResponsive(url, options)</code></article><article><span>02</span><h3>Portable HTML</h3><p>Open locally, attach to CI, or keep as an artifact.</p><code>generateHtmlReport(report)</code></article><article><span>03</span><h3>Pull requests</h3><p>Compare candidate and baseline at identical widths.</p><code>--fail-on-regression</code></article></div>
+        <p class="eyebrow">One engine. Three activation paths.</p><div class="integration-row"><article><span>01</span><h3>Typed API</h3><p>Use report objects directly in your TypeScript tooling.</p><code>scanResponsive(url, options)</code></article><article><span>02</span><h3>CI bootstrap</h3><p>Generate a typed config and a read-only GitHub Actions workflow.</p><code>npx widthwatch init</code></article><article><span>03</span><h3>Pull request gate</h3><p>Fail on new responsive ranges and keep the HTML evidence as an artifact.</p><code>2 new ranges · check failed</code></article></div>
       </section>
 
-      <section class="final"><div><p class="eyebrow">MIT licensed · TypeScript · Chromium</p><h2>Catch what fixed<br>breakpoints miss.</h2></div><a class="command" data-widthwatch-ignore href="#demo"><code>Scan a public page</code><span>Start ↓</span></a></section>
+      <section class="final"><div><p class="eyebrow">MIT licensed · TypeScript · Chromium</p><h2>Catch what fixed<br>breakpoints miss.</h2></div><div class="final-actions"><button class="command" data-widthwatch-ignore data-copy="npx widthwatch init" type="button"><code>npx widthwatch init</code><span>Copy</span></button><a class="command secondary-command" data-widthwatch-ignore href="#demo"><code>Scan a public page</code><span>Start ↓</span></a></div></section>
     </main>
     <footer><a class="brand" href="#top">width<span>watch</span></a><p>Built by <a href="https://github.com/damianociarla">Damiano Ciarla</a> for layouts that survive the space between breakpoints.</p></footer>
     <script type="module" src="/src/main.ts"></script>

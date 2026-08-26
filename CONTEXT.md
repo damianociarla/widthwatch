@@ -34,4 +34,16 @@ The job-scoped execution lifecycle for one hosted scan. A bounded egress session
 
 ## Job outcome
 
-The sanitized operational result of a hosted scan. A failed job outcome contains a stable failure code, phase and duration, plus bounded transfer metadata only when applicable. It never contains a target URL, hostname, query string, page content, raw error message or stack trace. HTTP admission exposes the safe code and sends the same outcome to an operational adapter.
+The sanitized terminal result of an accepted hosted scan. A completed job outcome contains bounded timing, probe and capture counts. A failed job outcome contains a stable failure code, phase and timing, plus bounded transfer metadata only when applicable. It never contains a target URL, hostname, query string, page content, raw error message or stack trace. HTTP admission exposes the safe failure code and sends every outcome to one operational adapter.
+
+## Admission rejection
+
+A sanitized refusal before a hosted job exists. It records only a stable capacity or rate-limit code; it never records the client address, target, body or raw error. Admission rejection and job outcome share the operational event adapter but remain different domain events.
+
+## Scanner control plane
+
+The fail-closed emergency boundary for public scan admission. A dedicated WAF rule group owns only exact `POST /v1/scans`; its switch-only stack and least-privilege workflow are independent of image publication, App Runner and ordinary edge deployments. Disable never depends on alerting. Enable requires confirmed regional alert subscriptions.
+
+## Public report link
+
+The bearer URL for one hosted standalone report. S3 storage remains private, but anyone who has the unguessable application URL can open the report until it expires. The report can reproduce page title, URL, screenshots and visible content, so no secrecy is promised and indexing is explicitly discouraged at the HTTP boundary.

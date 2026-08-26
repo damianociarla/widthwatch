@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { scanResponsive } from "widthwatch";
 import { createHostedScanRunner, hostedScanConfig } from "./hosted-scan.js";
 import { createHttpAdmissionServer, httpAdmissionConfig } from "./http-admission.js";
-import { createJsonJobFailureObserver } from "./job-outcome.js";
+import { createJsonOperationalEventObserver } from "./job-outcome.js";
 import { assertPublicUrl, resolvePublicTarget } from "./network-policy.js";
 import { ReportStore } from "./report-store.js";
 
@@ -19,7 +19,7 @@ const server = createHttpAdmissionServer(
     reports: new ReportStore(),
     createId: randomUUID,
     now: Date.now,
-    onJobFailed: createJsonJobFailureObserver(),
+    onOperationalEvent: createJsonOperationalEventObserver(),
   },
   httpAdmissionConfig(),
 );

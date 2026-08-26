@@ -7,9 +7,9 @@ test("landing exposes the scanner, docs and published package command", async ()
   assert.match(html, /Trace a public page/);
   assert.match(html, /npx widthwatch https:\/\/your-site\.com/);
   assert.match(html, /Open source · Available on npm/);
-  assert.match(html, /Bounded public demo · 5 adaptive samples/);
+  assert.match(html, /Bounded public demo · 5 geometry probes · up to 5 captures/);
   assert.match(html, /75 MiB transfer cap/);
-  assert.match(html, /Local\/CI scans use the full configurable schedule/);
+  assert.match(html, /Local\/CI uses the full configurable schedule/);
   assert.match(html, /data-copy=/);
   assert.match(html, /docs\.html/);
   assert.match(html, /id="reportLink"/);
@@ -19,7 +19,10 @@ test("landing exposes the scanner, docs and published package command", async ()
   assert.match(html, /application\/ld\+json/);
   assert.match(html, /og-widthwatch\.png/);
   assert.match(html, /summary_large_image/);
-  assert.match(html, /softwareVersion":"0\.4\.6/);
+  assert.match(html, /Screenshots and reports are retained for 7 days/);
+  assert.match(html, /anyone who has the report link/);
+  assert.match(html, /npx widthwatch init/);
+  assert.match(html, /softwareVersion":"0\.4\.7/);
   assert.match(html, /id="navToggle"/);
   assert.match(html, /Reproducible evidence/);
   assert.match(html, /href="\.\/proof\.html"/);
@@ -57,6 +60,8 @@ test("public scanner serializes runs and the landing exposes visible keyboard fo
   assert.match(source, /new AbortController/);
   assert.match(source, /submitButton\.disabled = true/);
   assert.match(source, /run !== scanRun/);
+  assert.match(source, /transfer_limit:[\s\S]*75 MiB transfer limit/);
+  assert.match(source, /state\.textContent = "● failed"/);
   assert.match(styles, /:focus-visible/);
   assert.match(styles, /outline-offset/);
 });

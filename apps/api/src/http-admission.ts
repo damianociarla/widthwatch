@@ -1,7 +1,15 @@
 import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { generateHtmlReport, type ScanOptions, type WidthWatchReport } from "widthwatch";
-import { createJobFailureEvent, type JobFailureCode, type JobFailureObserver, type JobFailurePhase } from "./job-outcome.js";
+import {
+  createAdmissionRejectedEvent,
+  createJobCompletedEvent,
+  createJobFailureEvent,
+  type JobFailureCode,
+  type JobFailurePhase,
+  type OperationalEvent,
+  type OperationalEventObserver,
+} from "./job-outcome.js";
 import { UnsafeUrlError } from "./network-policy.js";
 import { holdConnectionUntilSettled, scanStatusPayload, type HostedScanStatus } from "./scan-response.js";
 import { persistReportBestEffort, type ReportStore } from "./report-store.js";
@@ -26,7 +34,7 @@ export interface HttpAdmissionAdapters {
   reports: Pick<ReportStore, "get" | "put">;
   createId(): string;
   now(): number;
-  onJobFailed: JobFailureObserver;
+  onOperationalEvent: OperationalEventObserver;
 }
 
 export interface HttpAdmissionConfig {
@@ -101,15 +109,20 @@ export function createHttpAdmissionServer(adapters: HttpAdmissionAdapters, confi
       if (url.length > 2_000) return json(response, 400, { error: "invalid_url" });
       const target = await adapters.acceptTarget(url);
       const client = clientAddress(request);
-      if (queue.length >= config.maxQueuedJobs || jobs.size >= config.maxJobs) return json(response, 503, { error: "capacity_reached" });
+      if (queue.length >= config.maxQueuedJobs || jobs.size >= config.maxJobs) {
+        observe(createAdmissionRejectedEvent("capacity_limit"));
+        return json(response, 503, { error: "capacity_reached" });
+      }
       if (
         !consumeRateLimits([
           { limiter: clientLimit, key: client },
           { limiter: targetLimit, key: target.hostname },
           { limiter: globalLimit, key: "global" },
         ])
-      )
+      ) {
+        observe(createAdmissionRejectedEvent("rate_limit"));
         return json(response, 429, { error: "rate_limited", retryAfterSeconds: 600 });
+      }
       const job: Job = { id: adapters.createId(), url: target.toString(), createdAt: adapters.now(), status: "queued" };
       jobs.set(job.id, job);
       queue.push(job);
@@ -145,11 +158,12 @@ export function createHttpAdmissionServer(adapters: HttpAdmissionAdapters, confi
       response
         .writeHead(200, {
           "content-type": "text/html; charset=utf-8",
-          "cache-control": "private, max-age=60",
+          "cache-control": "private, no-store",
           "content-security-policy":
             "default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
           "referrer-policy": "no-referrer",
           "x-content-type-options": "nosniff",
+          "x-robots-tag": "noindex, nofollow, noarchive",
         })
         .end(html);
     } catch {
@@ -164,6 +178,7 @@ export function createHttpAdmissionServer(adapters: HttpAdmissionAdapters, confi
       const job = queue.shift()!;
       job.status = "running";
       const startedAt = adapters.now();
+      const queueMs = startedAt - job.createdAt;
       let phase: JobFailurePhase = "scan";
       try {
         job.report = await adapters.scan(job.url, {
@@ -185,23 +200,40 @@ export function createHttpAdmissionServer(adapters: HttpAdmissionAdapters, confi
           blockResourceTypes: ["media", "websocket"],
           allowedUrl: adapters.allowResource,
         });
+        const scannedAt = adapters.now();
         phase = "report";
         job.reportHtml = generateHtmlReport(job.report);
+        const completedAt = adapters.now();
         job.status = "complete";
         void persistReportBestEffort(adapters.reports, job.id, job.reportHtml);
+        observe(
+          createJobCompletedEvent({
+            jobId: job.id,
+            durationMs: completedAt - startedAt,
+            queueMs,
+            scanMs: scannedAt - startedAt,
+            reportMs: completedAt - scannedAt,
+            probes: job.report.probes?.length ?? job.report.frames.length,
+            captures: job.report.frames.length,
+          }),
+        );
       } catch (error) {
-        const outcome = createJobFailureEvent({ jobId: job.id, phase, durationMs: adapters.now() - startedAt, error });
+        const outcome = createJobFailureEvent({ jobId: job.id, phase, durationMs: adapters.now() - startedAt, queueMs, error });
         job.status = "failed";
         job.error = "The bounded scan could not complete.";
         job.failureCode = outcome.failureCode;
-        try {
-          adapters.onJobFailed(outcome);
-        } catch {
-          // Telemetry must not change public job state or stop the queue.
-        }
+        observe(outcome);
       }
     }
     running = false;
+  }
+
+  function observe(event: OperationalEvent): void {
+    try {
+      adapters.onOperationalEvent(event);
+    } catch {
+      // Telemetry must not change public state or stop admission and queue progress.
+    }
   }
 }
 

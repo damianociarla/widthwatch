@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { EgressBudgetExceededError } from "../dist/egress-budget.js";
-import { createJobFailureEvent, createJsonJobFailureObserver } from "../dist/job-outcome.js";
+import { createAdmissionRejectedEvent, createJobCompletedEvent, createJobFailureEvent, createJsonOperationalEventObserver } from "../dist/job-outcome.js";
 
 test("job outcomes classify failures without retaining sensitive error details", () => {
   const cases = [
@@ -35,13 +35,31 @@ test("transfer outcomes expose only bounded numeric diagnostics", () => {
     failureCode: "transfer_limit",
     phase: "scan",
     durationMs: 11,
+    queueMs: 0,
     transfer: { scope: "response", limitBytes: 10, observedBytes: 20 },
   });
 });
 
-test("JSON observer emits one safe line using the stable job-outcome schema", () => {
+test("completed and rejected operational events expose only bounded metrics", () => {
+  assert.deepEqual(createJobCompletedEvent({ jobId: "job-1", durationMs: 10.6, queueMs: -1, scanMs: 8.4, reportMs: 2.2, probes: 5.2, captures: 4.8 }), {
+    event: "hosted_scan_completed",
+    jobId: "job-1",
+    durationMs: 11,
+    queueMs: 0,
+    scanMs: 8,
+    reportMs: 2,
+    probes: 5,
+    captures: 5,
+  });
+  assert.deepEqual(createAdmissionRejectedEvent("capacity_limit"), {
+    event: "hosted_scan_rejected",
+    rejectionCode: "capacity_limit",
+  });
+});
+
+test("JSON observer emits safe lines using the stable operational schema", () => {
   const lines = [];
-  const observe = createJsonJobFailureObserver((line) => lines.push(line));
+  const observe = createJsonOperationalEventObserver((line) => lines.push(line));
   observe(
     createJobFailureEvent({
       jobId: "job-1",

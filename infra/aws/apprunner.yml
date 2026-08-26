@@ -99,6 +99,48 @@ Resources:
           MetricName: TransferLimitFailures
           MetricValue: "1"
           DefaultValue: 0
+  JobCompletedMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Sub "/aws/apprunner/widthwatch-api/${Service.ServiceId}/application"
+      FilterName: widthwatch-hosted-scan-completions
+      FilterPattern: '{ $.event = "hosted_scan_completed" }'
+      MetricTransformations:
+        - MetricNamespace: WidthWatch/Hosted
+          MetricName: CompletedScans
+          MetricValue: "1"
+          DefaultValue: 0
+  JobDurationMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Sub "/aws/apprunner/widthwatch-api/${Service.ServiceId}/application"
+      FilterName: widthwatch-hosted-scan-duration
+      FilterPattern: '{ $.event = "hosted_scan_completed" }'
+      MetricTransformations:
+        - MetricNamespace: WidthWatch/Hosted
+          MetricName: JobDurationMs
+          MetricValue: $.durationMs
+  QueueDurationMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Sub "/aws/apprunner/widthwatch-api/${Service.ServiceId}/application"
+      FilterName: widthwatch-hosted-queue-duration
+      FilterPattern: '{ $.event = "hosted_scan_completed" }'
+      MetricTransformations:
+        - MetricNamespace: WidthWatch/Hosted
+          MetricName: QueueDurationMs
+          MetricValue: $.queueMs
+  AdmissionRejectedMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Sub "/aws/apprunner/widthwatch-api/${Service.ServiceId}/application"
+      FilterName: widthwatch-hosted-scan-rejections
+      FilterPattern: '{ $.event = "hosted_scan_rejected" }'
+      MetricTransformations:
+        - MetricNamespace: WidthWatch/Hosted
+          MetricName: RejectedScans
+          MetricValue: "1"
+          DefaultValue: 0
   FailedScansAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
@@ -123,6 +165,20 @@ Resources:
       Period: 300
       EvaluationPeriods: 1
       Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref OperationalAlertTopic]
+      OKActions: [!Ref OperationalAlertTopic]
+  AdmissionRejectedAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Ten public scan admissions were rejected within five minutes
+      Namespace: WidthWatch/Hosted
+      MetricName: RejectedScans
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
       AlarmActions: [!Ref OperationalAlertTopic]

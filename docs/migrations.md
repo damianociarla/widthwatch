@@ -1,5 +1,15 @@
 # Migration notes
 
+## v0.4.7
+
+This patch separates emergency scan admission from application deployment without changing report schema, sampling protocol or capture protocol. Existing baselines compatible with v0.4.0–v0.4.6 remain compatible with v0.4.7.
+
+Before the first v0.4.7 release, deploy the additive `infra/aws/scanner-switch-iam.yml` stack against the existing GitHub OIDC provider and deploy role. Configure its `ScannerSwitchRoleArn` and `ScannerSwitchExecutionRoleArn` outputs as protected environment variables `AWS_SCANNER_SWITCH_ROLE_ARN` and `AWS_SCANNER_SWITCH_EXECUTION_ROLE_ARN`. The next API deploy bootstraps `widthwatch-scanner-switch` disabled and updates the ordinary Web ACL to reference it. Confirm both existing SNS email subscriptions, then enable through `scanner-switch.yml`. Do not recreate the alert topics: replacing their subscriptions requires email confirmation again.
+
+The switch workflow updates only the dedicated WAF stack and verifies edge behavior with an exact change ID. Release and manual application deploys no longer accept scanner state. Cold bootstrap and missing configuration are fail-closed.
+
+Hosted reports now return `X-Robots-Tag: noindex, nofollow, noarchive`; the landing and security documentation explicitly describe their seven-day lifecycle and bearer-link access. Hosted failures map to actionable public copy, while completed jobs and admission rejections add redacted operational events and CloudWatch metrics. An hourly external canary crosses the expected enabled or disabled public path.
+
 ## v0.4.6
 
 This patch adds hosted operability without changing report schema, sampling protocol or capture protocol. Existing baselines compatible with v0.4.0–v0.4.5 remain compatible with v0.4.6.

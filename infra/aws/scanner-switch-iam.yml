@@ -1,0 +1,98 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Least-privilege IAM control plane for the WidthWatch public scanner switch
+Parameters:
+  GitHubOwner: { Type: String, Default: damianociarla }
+  GitHubRepository: { Type: String, Default: widthwatch }
+  GitHubOwnerId: { Type: String, Default: "2201712" }
+  GitHubRepositoryId: { Type: String, Default: "1344710185" }
+  ReleaseEnvironmentName: { Type: String, Default: production, AllowedPattern: "[A-Za-z0-9._-]+" }
+  ExistingGitHubOidcProviderArn: { Type: String }
+  GitHubDeployRoleName: { Type: String, Default: widthwatch-github-deploy }
+  RoleNameSuffix: { Type: String, Default: "", AllowedPattern: "^$|^-[A-Za-z0-9]+$" }
+Resources:
+  ScannerSwitchExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "widthwatch-scanner-switch-execution${RoleNameSuffix}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: cloudformation.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: WidthWatchScannerSwitchRuleGroup
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - wafv2:CreateRuleGroup
+                  - wafv2:DeleteRuleGroup
+                  - wafv2:GetRuleGroup
+                  - wafv2:ListTagsForResource
+                  - wafv2:TagResource
+                  - wafv2:UntagResource
+                  - wafv2:UpdateRuleGroup
+                Resource: !Sub "arn:${AWS::Partition}:wafv2:us-east-1:${AWS::AccountId}:global/rulegroup/widthwatch-scanner-switch/*"
+  ScannerSwitchRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "widthwatch-scanner-switch${RoleNameSuffix}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Federated: !Ref ExistingGitHubOidcProviderArn }
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubOwner}@${GitHubOwnerId}/${GitHubRepository}@${GitHubRepositoryId}:environment:${ReleaseEnvironmentName}"
+      Policies:
+        - PolicyName: WidthWatchScannerSwitchControl
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [cloudformation:DescribeStackEvents, cloudformation:DescribeStacks, cloudformation:UpdateStack]
+                Resource: !Sub "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:stack/widthwatch-scanner-switch/*"
+              - Effect: Allow
+                Action: cloudformation:DescribeStacks
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:stack/widthwatch-edge/*"
+                  - !Sub "arn:${AWS::Partition}:cloudformation:eu-west-1:${AWS::AccountId}:stack/widthwatch-api/*"
+              - Effect: Allow
+                Action: sns:ListSubscriptionsByTopic
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:sns:us-east-1:${AWS::AccountId}:widthwatch-edge-operational-alerts"
+                  - !Sub "arn:${AWS::Partition}:sns:eu-west-1:${AWS::AccountId}:widthwatch-operational-alerts"
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt ScannerSwitchExecutionRole.Arn
+  ExistingDeployRoleBootstrapPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: WidthWatchScannerSwitchBootstrap
+      Roles: [!Ref GitHubDeployRoleName]
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action:
+              - cloudformation:CreateChangeSet
+              - cloudformation:CreateStack
+              - cloudformation:DescribeChangeSet
+              - cloudformation:DescribeStackEvents
+              - cloudformation:DescribeStacks
+              - cloudformation:DeleteChangeSet
+              - cloudformation:ExecuteChangeSet
+              - cloudformation:GetTemplateSummary
+              - cloudformation:UpdateStack
+            Resource: !Sub "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:stack/widthwatch-scanner-switch/*"
+          - Effect: Allow
+            Action: iam:PassRole
+            Resource: !GetAtt ScannerSwitchExecutionRole.Arn
+Outputs:
+  ScannerSwitchRoleArn: { Value: !GetAtt ScannerSwitchRole.Arn }
+  ScannerSwitchExecutionRoleArn: { Value: !GetAtt ScannerSwitchExecutionRole.Arn }

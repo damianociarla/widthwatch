@@ -1,12 +1,12 @@
 {
   "name": "@widthwatch/web",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
-    "coverage": "VITE_COVERAGE=true npm run build && node test/browser-coverage.mjs",
+    "coverage": "VITE_COVERAGE=true VITE_API_URL=/api npm run build && node test/browser-coverage.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "npm run build && node --test test/*.test.mjs"
   },

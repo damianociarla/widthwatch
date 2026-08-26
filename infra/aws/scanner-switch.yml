@@ -1,0 +1,40 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Fail-closed WidthWatch public scanner control plane (bootstrap once in us-east-1)
+Parameters:
+  PublicScannerEnabled: { Type: String, Default: "false", AllowedValues: ["true", "false"] }
+Conditions:
+  ScannerEnabled: !Equals [!Ref PublicScannerEnabled, "true"]
+Resources:
+  ScannerSwitchRuleGroup:
+    Type: AWS::WAFv2::RuleGroup
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Name: widthwatch-scanner-switch
+      Description: Independent emergency admission switch, switch-only updates are owned by scanner-switch.yml
+      Scope: CLOUDFRONT
+      Capacity: 10
+      VisibilityConfig: { CloudWatchMetricsEnabled: true, MetricName: widthwatch-scanner-switch, SampledRequestsEnabled: true }
+      Rules:
+        - Name: ScannerAdmission
+          Priority: 0
+          Action: !If [ScannerEnabled, { Count: {} }, { Block: {} }]
+          Statement:
+            AndStatement:
+              Statements:
+                - ByteMatchStatement:
+                    FieldToMatch: { UriPath: {} }
+                    PositionalConstraint: EXACTLY
+                    SearchString: /v1/scans
+                    TextTransformations: [{ Priority: 0, Type: NONE }]
+                - ByteMatchStatement:
+                    FieldToMatch: { Method: {} }
+                    PositionalConstraint: EXACTLY
+                    SearchString: POST
+                    TextTransformations: [{ Priority: 0, Type: NONE }]
+          VisibilityConfig: { CloudWatchMetricsEnabled: true, MetricName: scanner-admission, SampledRequestsEnabled: true }
+Outputs:
+  RuleGroupArn: { Value: !GetAtt ScannerSwitchRuleGroup.Arn }
+  RuleGroupId: { Value: !GetAtt ScannerSwitchRuleGroup.Id }
+  RuleGroupName: { Value: widthwatch-scanner-switch }
+  PublicScannerStatus: { Value: !If [ScannerEnabled, ENABLED, DISABLED] }

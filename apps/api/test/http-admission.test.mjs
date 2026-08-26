@@ -11,7 +11,7 @@ function report(url = "https://example.com/") {
     scannedAt: new Date(0).toISOString(),
     durationMs: 1,
     range: { min: 320, max: 320, height: 800 },
-    environment: { browser: "test", platform: "test", packageVersion: "0.4.6" },
+    environment: { browser: "test", platform: "test", packageVersion: "0.4.7" },
     frames: [
       {
         width: 320,
@@ -30,7 +30,7 @@ function report(url = "https://example.com/") {
 
 async function fixture(t, options = {}) {
   const scans = [];
-  const failures = [];
+  const events = [];
   const stored = new Map();
   let ids = 0;
   const adapters = {
@@ -49,7 +49,7 @@ async function fixture(t, options = {}) {
     },
     createId: () => `abc-${++ids}`,
     now: () => Date.now(),
-    onJobFailed: (event) => failures.push(event),
+    onOperationalEvent: (event) => events.push(event),
     ...options.adapters,
   };
   const config = {
@@ -73,7 +73,7 @@ async function fixture(t, options = {}) {
   );
   const address = server.address();
   assert.ok(address && typeof address !== "string");
-  return { origin: `http://127.0.0.1:${address.port}`, scans, stored, failures };
+  return { origin: `http://127.0.0.1:${address.port}`, scans, stored, events };
 }
 
 async function post(origin, body, headers = {}) {
@@ -143,8 +143,8 @@ test("HTTP admission applies CORS only to configured origins", async (t) => {
   assert.equal(denied.headers.get("access-control-allow-origin"), null);
 });
 
-test("HTTP admission runs a scan and serves status plus a protected report", async (t) => {
-  const { origin, scans } = await fixture(t);
+test("HTTP admission runs a scan, emits completion telemetry and serves a protected report", async (t) => {
+  const { origin, scans, events } = await fixture(t);
   const accepted = await post(origin, JSON.stringify({ url: "example.com" }), { "cloudfront-viewer-address": "203.0.113.1:443" });
   assert.equal(accepted.status, 202);
   const body = await accepted.json();
@@ -161,7 +161,21 @@ test("HTTP admission runs a scan and serves status plus a protected report", asy
   const reportResponse = await fetch(`${origin}/v1/reports/abc-1`);
   assert.equal(reportResponse.status, 200);
   assert.match(reportResponse.headers.get("content-security-policy"), /default-src 'none'/);
+  assert.equal(reportResponse.headers.get("cache-control"), "private, no-store");
+  assert.equal(reportResponse.headers.get("x-robots-tag"), "noindex, nofollow, noarchive");
   assert.match(await reportResponse.text(), /WidthWatch/);
+  assert.deepEqual(events, [
+    {
+      event: "hosted_scan_completed",
+      jobId: "abc-1",
+      durationMs: events[0].durationMs,
+      queueMs: events[0].queueMs,
+      scanMs: events[0].scanMs,
+      reportMs: events[0].reportMs,
+      probes: 1,
+      captures: 1,
+    },
+  ]);
 });
 
 test("HTTP admission returns not-found and report-unavailable status codes", async (t) => {
@@ -182,27 +196,39 @@ test("HTTP admission returns not-found and report-unavailable status codes", asy
   assert.equal((await fetch(`${origin}/missing`)).status, 404);
 });
 
-test("HTTP admission rate limits atomically after the first accepted scan", async (t) => {
-  const { origin } = await fixture(t, { config: { clientLimit: 1, targetLimit: 10, globalLimit: 10 } });
+test("persisted reports retain the bearer-link noindex and no-store policy", async (t) => {
+  const { origin, stored } = await fixture(t);
+  stored.set("dead-beef", "<!doctype html><title>Persisted report</title>");
+  const response = await fetch(`${origin}/v1/reports/dead-beef`);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("x-robots-tag"), "noindex, nofollow, noarchive");
+  assert.equal(response.headers.get("cache-control"), "private, no-store");
+  assert.match(await response.text(), /Persisted report/);
+});
+
+test("HTTP admission rate limits atomically and emits a redacted rejection", async (t) => {
+  const { origin, events } = await fixture(t, { config: { clientLimit: 1, targetLimit: 10, globalLimit: 10 } });
   const headers = { "cloudfront-viewer-address": "203.0.113.2:443" };
   assert.equal((await post(origin, JSON.stringify({ url: "example.com" }), headers)).status, 202);
   const limited = await post(origin, JSON.stringify({ url: "example.com" }), headers);
   assert.equal(limited.status, 429);
   assert.deepEqual(await limited.json(), { error: "rate_limited", retryAfterSeconds: 600 });
+  assert.deepEqual(events.at(-1), { event: "hosted_scan_rejected", rejectionCode: "rate_limit" });
 });
 
-test("HTTP admission enforces retained-job capacity before accepting work", async (t) => {
-  const { origin, scans } = await fixture(t, { config: { maxJobs: 1, clientLimit: 10, targetLimit: 10, globalLimit: 10 } });
+test("HTTP admission enforces retained-job capacity and emits a redacted rejection", async (t) => {
+  const { origin, scans, events } = await fixture(t, { config: { maxJobs: 1, clientLimit: 10, targetLimit: 10, globalLimit: 10 } });
   assert.equal((await post(origin, JSON.stringify({ url: "one.example" }))).status, 202);
   const full = await post(origin, JSON.stringify({ url: "two.example" }));
   assert.equal(full.status, 503);
   assert.deepEqual(await full.json(), { error: "capacity_reached" });
   assert.equal(scans.length, 1);
+  assert.deepEqual(events.at(-1), { event: "hosted_scan_rejected", rejectionCode: "capacity_limit" });
 });
 
 test("HTTP admission exposes safe failure codes and sends one redacted job outcome", async (t) => {
   const raw = new Error("total request budget exceeded for https://secret.example/?token=private");
-  const { origin, failures } = await fixture(t, {
+  const { origin, events } = await fixture(t, {
     adapters: {
       scan: async () => {
         throw raw;
@@ -216,11 +242,11 @@ test("HTTP admission exposes safe failure codes and sends one redacted job outco
     { status: body.status, error: body.error, failureCode: body.failureCode },
     { status: "failed", error: "The bounded scan could not complete.", failureCode: "request_limit" },
   );
-  assert.equal(failures.length, 1);
-  assert.equal(failures[0].jobId, "abc-1");
-  assert.equal(failures[0].phase, "scan");
-  assert.equal(JSON.stringify(failures).includes("secret.example"), false);
-  assert.equal(JSON.stringify(failures).includes("private"), false);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].jobId, "abc-1");
+  assert.equal(events[0].phase, "scan");
+  assert.equal(JSON.stringify(events).includes("secret.example"), false);
+  assert.equal(JSON.stringify(events).includes("private"), false);
 });
 
 test("telemetry failures never change job state or stop the queue", async (t) => {
@@ -233,7 +259,7 @@ test("telemetry failures never change job state or stop the queue", async (t) =>
         if (calls === 1) throw new Error("browser crashed");
         return report(url);
       },
-      onJobFailed: () => {
+      onOperationalEvent: () => {
         throw new Error("telemetry unavailable");
       },
     },
@@ -246,12 +272,12 @@ test("telemetry failures never change job state or stop the queue", async (t) =>
 });
 
 test("report generation failures are classified in the report phase", async (t) => {
-  const { origin, failures } = await fixture(t, {
+  const { origin, events } = await fixture(t, {
     adapters: {
       scan: async () => null,
     },
   });
   const body = await (await post(origin, JSON.stringify({ url: "public.example" }))).json();
   assert.equal(body.failureCode, "internal_failure");
-  assert.equal(failures[0].phase, "report");
+  assert.equal(events[0].phase, "report");
 });

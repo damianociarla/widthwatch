@@ -1,0 +1,33 @@
+name: Public scanner switch
+run-name: Scanner ${{ inputs.state }} · ${{ inputs.change_id }}
+on:
+  workflow_dispatch:
+    inputs:
+      state:
+        description: Explicit public scanner state
+        required: true
+        type: choice
+        options: [disable, enable]
+      change_id:
+        description: Unique incident/change identifier used to select the exact run
+        required: true
+        type: string
+permissions: {}
+concurrency: { group: widthwatch-scanner-switch, cancel-in-progress: false }
+jobs:
+  switch:
+    runs-on: ubuntu-latest
+    environment: production
+    permissions: { contents: read, id-token: write }
+    steps:
+      - uses: actions/checkout@v6
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_SCANNER_SWITCH_ROLE_ARN }}
+          aws-region: us-east-1
+          allowed-account-ids: ${{ vars.AWS_ACCOUNT_ID }}
+      - run: ./infra/aws/scanner-switch.sh
+        env:
+          WIDTHWATCH_SCANNER_STATE: ${{ inputs.state }}
+          WIDTHWATCH_SCANNER_SWITCH_EXECUTION_ROLE_ARN: ${{ vars.AWS_SCANNER_SWITCH_EXECUTION_ROLE_ARN }}
+          WIDTHWATCH_ALERT_EMAIL: ${{ secrets.WIDTHWATCH_BUDGET_ALERT_EMAIL }}

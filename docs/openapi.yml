@@ -1,5 +1,5 @@
 openapi: 3.1.0
-info: { title: WidthWatch hosted scanner, version: 0.4.6 }
+info: { title: WidthWatch hosted scanner, version: 0.4.7 }
 servers:
   - url: "https://d35vhnded4ly3z.cloudfront.net"
     description: Bounded public scanner through CloudFront and AWS WAF
@@ -39,7 +39,9 @@ paths:
       parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
       responses:
         "200":
-          description: Interactive standalone HTML report
+          description: Bearer-link interactive standalone HTML report; anyone with the link can read its public-page evidence until expiry
+          headers:
+            X-Robots-Tag: { schema: { type: string, const: "noindex, nofollow, noarchive" } }
           content: { text/html: { schema: { type: string } } }
-        "404": { description: Unknown, incomplete, or report older than the seven-day public retention window }
+        "404": { description: Unknown, incomplete, expired, or unavailable after worker restart when persistent storage is not configured }
         "503": { description: Persistent report storage is temporarily unavailable }
