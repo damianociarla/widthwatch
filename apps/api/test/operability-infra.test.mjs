@@ -40,23 +40,33 @@ test("incident-control infrastructure versions alarms, alert routing and the sca
   assert.match(scannerSwitch, /PublicScannerStatus/);
   assert.match(scannerSwitchIam, /ScannerSwitchRole/);
   assert.match(scannerSwitchIam, /ScannerSwitchExecutionRole/);
-  assert.match(scannerSwitchIam, /ExistingDeployRoleBootstrapPolicy/);
+  assert.match(scannerSwitchIam, /CanaryRole/);
+  assert.match(scannerSwitchIam, /WidthWatchCanaryReadOnly/);
+  assert.match(scannerSwitchIam, /environment:\$\{CanaryEnvironmentName\}/);
+  assert.match(scannerSwitchIam, /ExistingDeployRoleReadPolicy/);
+  assert.match(scannerSwitchIam, /WidthWatchScannerSwitchReadOnly/);
   assert.match(scannerSwitchIam, /widthwatch-scanner-switch\/\*/);
   assert.match(role, /cloudwatch:PutMetricAlarm/);
   assert.match(role, /logs:PutMetricFilter/);
   assert.match(role, /sns:Subscribe/);
 });
 
-test("application deploy bootstraps fail-closed and never mutates scanner state", async () => {
+test("application deploy requires a fail-closed bootstrap and cannot mutate scanner state", async () => {
   const deploy = await source("infra/aws/deploy.sh");
   const release = await source(".github/workflows/release.yml");
   const manual = await source(".github/workflows/deploy-api.yml");
   assert.match(deploy, /WIDTHWATCH_BUDGET_ALERT_EMAIL:\?Set/);
-  assert.match(deploy, /Bootstrapping the independent scanner switch/);
+  assert.match(deploy, /Bootstrap it disabled before deploying the application/);
   assert.match(deploy, /ScannerSwitchRuleGroupArn=\$scanner_switch_arn/);
+  assert.doesNotMatch(deploy, /cloudformation deploy .*widthwatch-scanner-switch/);
   assert.doesNotMatch(deploy, /PublicScannerEnabled=/);
   assert.doesNotMatch(release, /WIDTHWATCH_PUBLIC_SCANNER_ENABLED/);
   assert.doesNotMatch(manual, /WIDTHWATCH_PUBLIC_SCANNER_ENABLED/);
+  assert.doesNotMatch(release, /AWS_SCANNER_SWITCH_EXECUTION_ROLE_ARN/);
+  assert.doesNotMatch(manual, /AWS_SCANNER_SWITCH_EXECUTION_ROLE_ARN/);
+  const readPolicy = (await source("infra/aws/scanner-switch-iam.yml")).match(/ExistingDeployRoleReadPolicy:[\s\S]*?Outputs:/)?.[0] ?? "";
+  assert.match(readPolicy, /Action: cloudformation:DescribeStacks/);
+  assert.doesNotMatch(readPolicy, /CreateChangeSet|ExecuteChangeSet|UpdateStack|iam:PassRole/);
   const syntax = spawnSync("bash", ["-n", `${root}/infra/aws/deploy.sh`], { encoding: "utf8" });
   assert.equal(syntax.status, 0, syntax.stderr);
 });
@@ -86,6 +96,48 @@ test("the scheduled canary crosses the expected public path", async () => {
   const canary = await source(".github/workflows/canary.yml");
   assert.match(canary, /schedule/);
   assert.match(canary, /PublicScannerEnabled/);
+  assert.match(canary, /AWS_CANARY_ROLE_ARN/);
+  assert.doesNotMatch(canary, /AWS_SCANNER_SWITCH_ROLE_ARN/);
   assert.match(canary, /x-robots-tag: noindex, nofollow, noarchive/i);
   assert.match(canary, /status" = complete/);
+  assert.match(canary, /gh issue create/);
+  assert.match(canary, /gh issue close/);
+});
+
+test("third-party actions are pinned and Dependabot maintains their SHAs", async () => {
+  const workflows = ["canary.yml", "ci.yml", "deploy-api.yml", "pages.yml", "release.yml", "scanner-switch.yml"];
+  for (const workflow of workflows) {
+    const sourceText = await source(`.github/workflows/${workflow}`);
+    for (const use of sourceText.matchAll(/uses:\s*([^\s#]+)/g)) {
+      assert.match(use[1], /@[a-f0-9]{40}$/, `${workflow} contains a mobile action reference: ${use[1]}`);
+    }
+  }
+  const dependabot = await source(".github/dependabot.yml");
+  assert.match(dependabot, /package-ecosystem: github-actions/);
+});
+
+test("versioned GitHub policy protects main, release tags and deployment refs", async () => {
+  const main = JSON.parse(await source("infra/github/main-ruleset.json"));
+  const tagCreation = JSON.parse(await source("infra/github/release-tag-creation-ruleset.json"));
+  const tagImmutability = JSON.parse(await source("infra/github/release-tags-ruleset.json"));
+  const actions = JSON.parse(await source("infra/github/actions-permissions.json"));
+  const selected = JSON.parse(await source("infra/github/selected-actions.json"));
+  const configure = await source("infra/github/configure.sh");
+  assert.equal(main.enforcement, "active");
+  assert.deepEqual(
+    main.rules.find((rule) => rule.type === "required_status_checks").parameters.required_status_checks.map((check) => check.context),
+    ["verify (22)", "verify (24)"],
+  );
+  assert.ok(main.rules.some((rule) => rule.type === "pull_request"));
+  assert.deepEqual(tagCreation.bypass_actors, [{ actor_id: 2201712, actor_type: "User", bypass_mode: "always" }]);
+  assert.deepEqual(tagCreation.rules, [{ type: "creation" }]);
+  assert.deepEqual(
+    tagImmutability.rules.map((rule) => rule.type),
+    ["deletion", "update"],
+  );
+  assert.deepEqual(actions, { enabled: true, allowed_actions: "selected", sha_pinning_required: true });
+  assert.equal(selected.github_owned_allowed, true);
+  assert.deepEqual(selected.patterns_allowed, ["aws-actions/configure-aws-credentials@*"]);
+  assert.match(configure, /production tag 'v\*'/);
+  assert.match(configure, /monitoring branch main/);
 });

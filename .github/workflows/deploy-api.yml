@@ -9,8 +9,8 @@ jobs:
     environment: production
     permissions: { contents: read, id-token: write }
     steps:
-      - uses: actions/checkout@v6
-      - uses: aws-actions/configure-aws-credentials@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: aws-actions/configure-aws-credentials@451ce2a72e8d729a59ebeaacab82dbce58e7af4c # v6
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: eu-west-1
@@ -21,7 +21,6 @@ jobs:
           AWS_ECR_ACCESS_ROLE_ARN: ${{ vars.AWS_ECR_ACCESS_ROLE_ARN }}
           AWS_INSTANCE_ROLE_ARN: ${{ vars.AWS_INSTANCE_ROLE_ARN }}
           AWS_CLOUDFORMATION_ROLE_ARN: ${{ vars.AWS_CLOUDFORMATION_ROLE_ARN }}
-          AWS_SCANNER_SWITCH_EXECUTION_ROLE_ARN: ${{ vars.AWS_SCANNER_SWITCH_EXECUTION_ROLE_ARN }}
           WIDTHWATCH_ORIGIN_VERIFY_TOKEN: ${{ secrets.WIDTHWATCH_ORIGIN_VERIFY_TOKEN }}
           WIDTHWATCH_BUDGET_ALERT_EMAIL: ${{ secrets.WIDTHWATCH_BUDGET_ALERT_EMAIL }}
           WIDTHWATCH_IMAGE_TAG: ${{ github.sha }}

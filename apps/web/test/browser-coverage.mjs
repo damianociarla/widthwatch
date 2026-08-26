@@ -18,6 +18,10 @@ const server = createServer(async (request, response) => {
         response.writeHead(429, { "content-type": "application/json" }).end('{"error":"rate_limited"}');
         return;
       }
+      if (body.includes("paused.example")) {
+        response.writeHead(403, { "content-type": "application/json" }).end('{"error":"scanner_paused"}');
+        return;
+      }
       const failureCodes = {
         "too-large.example": "transfer_limit",
         "too-many.example": "request_limit",
@@ -26,7 +30,7 @@ const server = createServer(async (request, response) => {
         "browser.example": "browser_failure",
       };
       const failureCode = Object.entries(failureCodes).find(([hostname]) => body.includes(hostname))?.[1];
-      const id = body.includes("frames-only.example") ? "scan-frames" : "scan-ok";
+      const id = body.includes("frames-only.example") ? "scan-frames" : body.includes("missing-result.example") ? "scan-missing" : "scan-ok";
       response
         .writeHead(202, { "content-type": "application/json" })
         .end(JSON.stringify(failureCode ? { id: "scan-failed", status: "failed", failureCode } : { id, status: "complete" }));
@@ -122,6 +126,14 @@ try {
   await page.getByRole("button", { name: /Analyze/ }).click();
   await page.waitForFunction(() => document.querySelector("#scanState")?.textContent?.includes("rejected"));
   assert.match(await page.locator("#scanMessage").innerText(), /public demo limit/);
+  await page.getByLabel("Website URL").fill("https://paused.example");
+  await page.getByRole("button", { name: /Analyze/ }).click();
+  await page.waitForFunction(() => document.querySelector("#scanState")?.textContent?.includes("paused"));
+  assert.match(await page.locator("#scanMessage").innerText(), /temporarily paused/);
+  await page.getByLabel("Website URL").fill("https://missing-result.example");
+  await page.getByRole("button", { name: /Analyze/ }).click();
+  await page.waitForFunction(() => document.querySelector("#scanState")?.textContent?.includes("unavailable"));
+  assert.match(await page.locator("#scanMessage").innerText(), /accepted scan result/);
   await page.setViewportSize({ width: 1200, height: 800 });
   const entries = (await page.coverage.stopJSCoverage()).filter((entry) => /\/assets\/main-[^/]+\.js$/.test(entry.url));
   assert.equal(entries.length, 1, "Expected one production JavaScript bundle in browser coverage.");

@@ -6,6 +6,7 @@ Parameters:
   GitHubOwnerId: { Type: String, Default: "2201712" }
   GitHubRepositoryId: { Type: String, Default: "1344710185" }
   ReleaseEnvironmentName: { Type: String, Default: production, AllowedPattern: "[A-Za-z0-9._-]+" }
+  CanaryEnvironmentName: { Type: String, Default: monitoring, AllowedPattern: "[A-Za-z0-9._-]+" }
   ExistingGitHubOidcProviderArn: { Type: String }
   GitHubDeployRoleName: { Type: String, Default: widthwatch-github-deploy }
   RoleNameSuffix: { Type: String, Default: "", AllowedPattern: "^$|^-[A-Za-z0-9]+$" }
@@ -70,29 +71,40 @@ Resources:
               - Effect: Allow
                 Action: iam:PassRole
                 Resource: !GetAtt ScannerSwitchExecutionRole.Arn
-  ExistingDeployRoleBootstrapPolicy:
+  CanaryRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "widthwatch-canary${RoleNameSuffix}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Federated: !Ref ExistingGitHubOidcProviderArn }
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubOwner}@${GitHubOwnerId}/${GitHubRepository}@${GitHubRepositoryId}:environment:${CanaryEnvironmentName}"
+      Policies:
+        - PolicyName: WidthWatchCanaryReadOnly
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: cloudformation:DescribeStacks
+                Resource: !Sub "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:stack/widthwatch-scanner-switch/*"
+  ExistingDeployRoleReadPolicy:
     Type: AWS::IAM::Policy
     Properties:
-      PolicyName: WidthWatchScannerSwitchBootstrap
+      PolicyName: WidthWatchScannerSwitchReadOnly
       Roles: [!Ref GitHubDeployRoleName]
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
           - Effect: Allow
-            Action:
-              - cloudformation:CreateChangeSet
-              - cloudformation:CreateStack
-              - cloudformation:DescribeChangeSet
-              - cloudformation:DescribeStackEvents
-              - cloudformation:DescribeStacks
-              - cloudformation:DeleteChangeSet
-              - cloudformation:ExecuteChangeSet
-              - cloudformation:GetTemplateSummary
-              - cloudformation:UpdateStack
+            Action: cloudformation:DescribeStacks
             Resource: !Sub "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:stack/widthwatch-scanner-switch/*"
-          - Effect: Allow
-            Action: iam:PassRole
-            Resource: !GetAtt ScannerSwitchExecutionRole.Arn
 Outputs:
   ScannerSwitchRoleArn: { Value: !GetAtt ScannerSwitchRole.Arn }
   ScannerSwitchExecutionRoleArn: { Value: !GetAtt ScannerSwitchExecutionRole.Arn }
+  CanaryRoleArn: { Value: !GetAtt CanaryRole.Arn }

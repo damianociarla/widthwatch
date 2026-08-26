@@ -75,6 +75,17 @@ const reportLink = document.querySelector<HTMLAnchorElement>("#reportLink");
 const submitButton = form?.querySelector<HTMLButtonElement>('button[type="submit"]');
 type PublicFailureCode = "transfer_limit" | "request_limit" | "timeout" | "network_failure" | "browser_failure" | "internal_failure";
 type PublicJob = { id: string; status: string; error?: string; failureCode?: PublicFailureCode };
+type PublicScanUiState = "paused" | "rejected" | "unavailable";
+
+class PublicScanError extends Error {
+  constructor(
+    readonly uiState: PublicScanUiState,
+    message: string,
+  ) {
+    super(message);
+    this.name = "PublicScanError";
+  }
+}
 
 function failureMessage(job: PublicJob): string {
   const messages: Partial<Record<PublicFailureCode, string>> = {
@@ -113,8 +124,11 @@ form?.addEventListener("submit", async (event) => {
         signal: controller.signal,
       });
       if (run !== scanRun) return;
-      if (!response.ok)
-        throw new Error(response.status === 429 ? "The public demo limit has been reached. Try the local package." : "The scan could not be accepted.");
+      if (!response.ok) {
+        if (response.status === 403) throw new PublicScanError("paused", "The public scanner is temporarily paused. Use the local package meanwhile.");
+        if (response.status === 429) throw new PublicScanError("rejected", "The public demo limit has been reached. Try the local package.");
+        throw new PublicScanError("rejected", "The scan could not be accepted.");
+      }
       const job = (await response.json()) as PublicJob;
       if (run !== scanRun) return;
       state.textContent = `● ${job.status}`;
@@ -128,7 +142,7 @@ form?.addEventListener("submit", async (event) => {
       for (let attempt = 0; attempt < 45; attempt += 1) {
         const statusResponse = await fetch(`${apiUrl.replace(/\/$/, "")}/v1/scans/${job.id}`, { signal: controller.signal });
         if (run !== scanRun) return;
-        if (!statusResponse.ok) throw new Error("The scan result is no longer available.");
+        if (!statusResponse.ok) throw new PublicScanError("unavailable", "The accepted scan result is no longer available.");
         const result = (await statusResponse.json()) as PublicJob & {
           reportUrl?: string;
           report?: {
@@ -167,7 +181,7 @@ form?.addEventListener("submit", async (event) => {
         }
         return;
       }
-      throw new Error("The public scan exceeded its result window. Use the local package for larger pages.");
+      throw new PublicScanError("unavailable", "The public scan exceeded its result window. Use the local package for larger pages.");
     }
     state.textContent = "● demo";
     message.textContent = "Previewing adaptive sampling. Hosted workers are connected at deploy time.";
@@ -183,7 +197,7 @@ form?.addEventListener("submit", async (event) => {
     message.textContent = "1 deterministic issue found near 853px.";
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") return;
-    state.textContent = "● rejected";
+    state.textContent = `● ${error instanceof PublicScanError ? error.uiState : "unavailable"}`;
     message.textContent = error instanceof Error ? error.message : "Unable to start the scan.";
   } finally {
     if (run === scanRun) {

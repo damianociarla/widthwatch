@@ -22,7 +22,7 @@ test("landing exposes the scanner, docs and published package command", async ()
   assert.match(html, /Screenshots and reports are retained for 7 days/);
   assert.match(html, /anyone who has the report link/);
   assert.match(html, /npx widthwatch init/);
-  assert.match(html, /softwareVersion":"0\.4\.7/);
+  assert.match(html, /softwareVersion":"0\.4\.8/);
   assert.match(html, /id="navToggle"/);
   assert.match(html, /Reproducible evidence/);
   assert.match(html, /href="\.\/proof\.html"/);
@@ -62,6 +62,8 @@ test("public scanner serializes runs and the landing exposes visible keyboard fo
   assert.match(source, /run !== scanRun/);
   assert.match(source, /transfer_limit:[\s\S]*75 MiB transfer limit/);
   assert.match(source, /state\.textContent = "● failed"/);
+  assert.match(source, /PublicScanError\("paused"/);
+  assert.match(source, /PublicScanError\("unavailable"/);
   assert.match(styles, /:focus-visible/);
   assert.match(styles, /outline-offset/);
 });

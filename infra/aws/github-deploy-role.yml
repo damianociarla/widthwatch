@@ -227,12 +227,14 @@ Resources:
                 Resource:
                   - !Sub "arn:${AWS::Partition}:cloudformation:eu-west-1:${AWS::AccountId}:stack/widthwatch-api/*"
                   - !Sub "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:stack/widthwatch-edge/*"
+              - Effect: Allow
+                Action: cloudformation:DescribeStacks
+                Resource:
                   - !Sub "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:stack/widthwatch-scanner-switch/*"
               - Effect: Allow
                 Action: iam:PassRole
                 Resource:
                   - !GetAtt CloudFormationExecutionRole.Arn
-                  - !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/widthwatch-scanner-switch-execution${RoleNameSuffix}"
 
 Outputs:
   GitHubDeployRoleArn:
@@ -247,3 +249,5 @@ Outputs:
     Value: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/widthwatch-scanner-switch${RoleNameSuffix}"
   ScannerSwitchExecutionRoleArn:
     Value: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/widthwatch-scanner-switch-execution${RoleNameSuffix}"
+  CanaryRoleArn:
+    Value: !Sub "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/widthwatch-canary${RoleNameSuffix}"
