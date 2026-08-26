@@ -56,7 +56,7 @@ Resources:
             Version: "2012-10-17"
             Statement:
               - Effect: Allow
-                Action: [cloudformation:DescribeStackEvents, cloudformation:DescribeStacks, cloudformation:UpdateStack]
+                Action: [cloudformation:DescribeStackEvents, cloudformation:DescribeStacks, cloudformation:GetTemplate, cloudformation:UpdateStack]
                 Resource: !Sub "arn:${AWS::Partition}:cloudformation:us-east-1:${AWS::AccountId}:stack/widthwatch-scanner-switch/*"
               - Effect: Allow
                 Action: cloudformation:DescribeStacks

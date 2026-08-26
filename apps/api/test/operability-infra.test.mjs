@@ -55,6 +55,7 @@ test("incident-control infrastructure versions alarms, alert routing and the sca
   assert.match(scannerSwitchIam, /ExistingDeployRoleReadPolicy/);
   assert.match(scannerSwitchIam, /WidthWatchScannerSwitchReadOnly/);
   assert.match(scannerSwitchIam, /widthwatch-scanner-switch\/\*/);
+  assert.match(scannerSwitchIam, /cloudformation:GetTemplate/);
   assert.match(role, /cloudwatch:PutMetricAlarm/);
   assert.match(role, /logs:PutMetricFilter/);
   assert.match(role, /sns:Subscribe/);
@@ -164,13 +165,18 @@ test("release installs the versioned scanner control-plane template before appli
   assert.match(release, /upgrade-scanner-switch:/);
   assert.match(release, /uses: \.\/\.github\/workflows\/upgrade-scanner-switch\.yml/);
   assert.match(release, /needs: \[release-ref, validate, upgrade-scanner-switch\]/);
+  assert.doesNotMatch(release, /secrets: inherit/);
   assert.match(workflow, /workflow_call/);
   assert.match(workflow, /validate-release-ref\.sh/);
   assert.match(workflow, /AWS_SCANNER_SWITCH_ROLE_ARN/);
-  assert.match(upgrade, /--template-body "file:\/\/\$template"/);
+  assert.match(upgrade, /--template-body "file:\/\/\$template_path"/);
   assert.doesNotMatch(upgrade, /--use-previous-template/);
-  assert.match(upgrade, /ParameterKey=PublicScannerEnabled,ParameterValue=\$current_state/);
-  assert.match(upgrade, /ParameterKey=ControlPlaneRevision,ParameterValue=\$revision/);
+  assert.match(upgrade, /cloudformation get-template/);
+  assert.match(upgrade, /previous_template/);
+  assert.match(upgrade, /rollback_control_plane/);
+  assert.match(upgrade, /verify_control_plane .*rollback/);
+  assert.match(upgrade, /ParameterKey=PublicScannerEnabled,ParameterValue=\$state/);
+  assert.match(upgrade, /ParameterKey=ControlPlaneRevision,ParameterValue=\$control_plane_revision/);
   assert.match(upgrade, /installed_state.*current_state/);
   assert.match(upgrade, /installed_revision.*revision/);
   assert.match(verification, /scanner_paused/);
@@ -192,6 +198,8 @@ test("the scheduled canary crosses the expected public path", async () => {
   assert.match(canary, /scanner_paused/);
   assert.match(canary, /access-control-allow-origin/);
   assert.match(canary, /cache-control: no-store/);
+  assert.match(canary, /response_directory="\$\(mktemp -d\)"/);
+  assert.match(canary, /trap 'rm -r "\$response_directory"'/);
   assert.match(canary, /status" = complete/);
   assert.match(canary, /gh issue create/);
   assert.match(canary, /gh issue close/);

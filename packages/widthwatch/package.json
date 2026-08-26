@@ -1,6 +1,6 @@
 {
   "name": "widthwatch",
-  "version": "0.4.10",
+  "version": "0.4.11",
   "description": "Continuous responsive visual regression testing with adaptive viewport discovery",
   "type": "module",
   "license": "MIT",
