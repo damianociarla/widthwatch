@@ -40,6 +40,7 @@ test("incident-control infrastructure versions alarms, alert routing and the sca
   assert.match(scannerSwitch, /AWS::WAFv2::RuleGroup/);
   assert.match(scannerSwitch, /DeletionPolicy: Retain/);
   assert.match(scannerSwitch, /PublicScannerStatus/);
+  assert.match(scannerSwitch, /ControlPlaneRevision/);
   assert.match(scannerSwitch, /ResponseCode: 403/);
   assert.match(scannerSwitch, /Access-Control-Allow-Origin/);
   assert.match(scannerSwitch, /Cache-Control, Value: "no-store"/);
@@ -84,6 +85,8 @@ test("application deploy requires a fail-closed bootstrap and cannot mutate scan
 test("release only accepts an immutable semantic-version tag connected to main", async (t) => {
   const workflow = await source(".github/workflows/release.yml");
   const validator = `${root}/infra/github/validate-release-ref.sh`;
+  const packageVersion = JSON.parse(await source("package.json")).version;
+  const validTag = `v${packageVersion}`;
   assert.doesNotMatch(workflow, /workflow_dispatch/);
   assert.doesNotMatch(workflow, /inputs\.tag/);
   assert.doesNotMatch(workflow, /ref: "\$\{\{ env\.RELEASE_TAG \}\}"/);
@@ -101,7 +104,7 @@ test("release only accepts an immutable semantic-version tag connected to main",
   assert.equal(git("commit", "-m", "main").status, 0);
   const mainSha = git("rev-parse", "HEAD").stdout.trim();
   assert.equal(git("update-ref", "refs/remotes/origin/main", mainSha).status, 0);
-  assert.equal(git("tag", "-a", "v1.2.3", "-m", "valid").status, 0);
+  assert.equal(git("tag", "-a", validTag, "-m", "valid").status, 0);
 
   const run = (tag, sha, extraEnvironment = {}) =>
     spawnSync(validator, [tag, sha], {
@@ -114,10 +117,13 @@ test("release only accepts an immutable semantic-version tag connected to main",
         ...extraEnvironment,
       },
     });
-  assert.equal(run("v1.2.3", mainSha).status, 0);
+  assert.equal(run(validTag, mainSha).status, 0);
   assert.notEqual(run("main", mainSha).status, 0);
   assert.notEqual(run(mainSha, mainSha).status, 0);
-  assert.notEqual(run("v9.9.9", mainSha).status, 0);
+  assert.equal(git("tag", "-a", "v9.9.9", "-m", "wrong version").status, 0);
+  const versionMismatch = run("v9.9.9", mainSha);
+  assert.notEqual(versionMismatch.status, 0);
+  assert.match(versionMismatch.stderr, /Release version mismatch/);
 
   assert.equal(git("switch", "-c", "feature").status, 0);
   await writeFile(join(directory, "fixture.txt"), "feature\n");
@@ -142,10 +148,36 @@ test("the independent switch workflow gates enable and correlates exact runs", a
   assert.match(runbook, /Expected results: health `200`; scan admission `403`/);
   assert.match(runbook, /PendingConfirmation/);
   assert.match(runbook, /state=enable/);
-  for (const path of ["infra/aws/deploy.sh", "infra/aws/scanner-switch.sh"]) {
+  for (const path of ["infra/aws/deploy.sh", "infra/aws/scanner-switch.sh", "infra/aws/verify-scanner-edge.sh"]) {
     const result = spawnSync("bash", ["-n", `${root}/${path}`], {
       encoding: "utf8",
     });
+    assert.equal(result.status, 0, result.stderr);
+  }
+});
+
+test("release installs the versioned scanner control-plane template before application deploy", async () => {
+  const release = await source(".github/workflows/release.yml");
+  const workflow = await source(".github/workflows/upgrade-scanner-switch.yml");
+  const upgrade = await source("infra/aws/upgrade-scanner-switch.sh");
+  const verification = await source("infra/aws/verify-scanner-edge.sh");
+  assert.match(release, /upgrade-scanner-switch:/);
+  assert.match(release, /uses: \.\/\.github\/workflows\/upgrade-scanner-switch\.yml/);
+  assert.match(release, /needs: \[release-ref, validate, upgrade-scanner-switch\]/);
+  assert.match(workflow, /workflow_call/);
+  assert.match(workflow, /validate-release-ref\.sh/);
+  assert.match(workflow, /AWS_SCANNER_SWITCH_ROLE_ARN/);
+  assert.match(upgrade, /--template-body "file:\/\/\$template"/);
+  assert.doesNotMatch(upgrade, /--use-previous-template/);
+  assert.match(upgrade, /ParameterKey=PublicScannerEnabled,ParameterValue=\$current_state/);
+  assert.match(upgrade, /ParameterKey=ControlPlaneRevision,ParameterValue=\$revision/);
+  assert.match(upgrade, /installed_state.*current_state/);
+  assert.match(upgrade, /installed_revision.*revision/);
+  assert.match(verification, /scanner_paused/);
+  assert.match(verification, /access-control-allow-origin/);
+  assert.match(verification, /cache-control: no-store/);
+  for (const path of ["infra/aws/upgrade-scanner-switch.sh", "infra/aws/verify-scanner-edge.sh"]) {
+    const result = spawnSync("bash", ["-n", `${root}/${path}`], { encoding: "utf8" });
     assert.equal(result.status, 0, result.stderr);
   }
 });
@@ -157,16 +189,20 @@ test("the scheduled canary crosses the expected public path", async () => {
   assert.match(canary, /AWS_CANARY_ROLE_ARN/);
   assert.doesNotMatch(canary, /AWS_SCANNER_SWITCH_ROLE_ARN/);
   assert.match(canary, /x-robots-tag: noindex, nofollow, noarchive/i);
+  assert.match(canary, /scanner_paused/);
+  assert.match(canary, /access-control-allow-origin/);
+  assert.match(canary, /cache-control: no-store/);
   assert.match(canary, /status" = complete/);
   assert.match(canary, /gh issue create/);
   assert.match(canary, /gh issue close/);
 });
 
 test("third-party actions are pinned and Dependabot maintains their SHAs", async () => {
-  const workflows = ["canary.yml", "ci.yml", "deploy-api.yml", "pages.yml", "release.yml", "scanner-switch.yml"];
+  const workflows = ["canary.yml", "ci.yml", "deploy-api.yml", "pages.yml", "release.yml", "scanner-switch.yml", "upgrade-scanner-switch.yml"];
   for (const workflow of workflows) {
     const sourceText = await source(`.github/workflows/${workflow}`);
     for (const use of sourceText.matchAll(/uses:\s*([^\s#]+)/g)) {
+      if (use[1].startsWith("./.github/workflows/")) continue;
       assert.match(use[1], /@[a-f0-9]{40}$/, `${workflow} contains a mobile action reference: ${use[1]}`);
     }
   }

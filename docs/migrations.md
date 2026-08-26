@@ -1,5 +1,15 @@
 # Migration notes
 
+## v0.4.10
+
+This patch adds a reproducible scanner control-plane migration without changing report schema, sampling protocol or capture protocol. Existing baselines compatible with v0.4.0–v0.4.9 remain compatible with v0.4.10.
+
+Every release now calls the dedicated `upgrade-scanner-switch.yml` workflow before the application deploy. The workflow accepts only the immutable release tag and SHA, reads the current `PublicScannerEnabled` value, installs the complete versioned `scanner-switch.yml` template through the existing narrow execution role, preserves the state exactly and verifies the installed SHA-256 `ControlPlaneRevision`. The operational enable/disable workflow remains independent and continues to use the previously installed template.
+
+Release validation now requires the tag version to match the root, API, web and npm package manifests, their lockfile entries, OpenAPI metadata and landing JSON-LD before any AWS or npm credentials are obtained. Disabled-state verification now checks the complete `403 scanner_paused` contract: JSON content type and body, landing-origin CORS and `Cache-Control: no-store`.
+
+Existing installations require no manual migration when releasing v0.4.10: the protected release workflow applies and records the control-plane revision. If the upgrade cannot preserve state or verify its revision and edge behavior, application deployment and GitHub Release creation remain blocked.
+
 ## v0.4.9
 
 This patch closes release-ref and cross-origin scanner-control gaps without changing report schema, sampling protocol or capture protocol. Existing baselines compatible with v0.4.0–v0.4.8 remain compatible with v0.4.9.

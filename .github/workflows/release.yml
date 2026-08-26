@@ -12,6 +12,8 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with: { ref: "${{ github.sha }}", fetch-depth: 0 }
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with: { node-version: 24, package-manager-cache: false }
       - name: Verify immutable release ref
         run: ./infra/github/validate-release-ref.sh "$GITHUB_REF_NAME" "$GITHUB_SHA"
   validate:
@@ -27,8 +29,13 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: pipx run cfn-lint infra/aws/*.yml
       - run: npm run typecheck && npm test && npm run build && npm run pack:check
-  deploy-api:
+  upgrade-scanner-switch:
     needs: [release-ref, validate]
+    permissions: { contents: read, id-token: write }
+    uses: ./.github/workflows/upgrade-scanner-switch.yml
+    secrets: inherit
+  deploy-api:
+    needs: [release-ref, validate, upgrade-scanner-switch]
     runs-on: ubuntu-latest
     environment: production
     permissions: { contents: read, id-token: write }
@@ -75,7 +82,7 @@ jobs:
             npm publish --workspace widthwatch
           fi
   github-release:
-    needs: [release-ref, deploy-api, publish-npm]
+    needs: [release-ref, upgrade-scanner-switch, deploy-api, publish-npm]
     runs-on: ubuntu-latest
     permissions: { contents: write }
     steps:

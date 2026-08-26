@@ -25,7 +25,15 @@ jobs:
           test "$(curl --retry 3 --max-time 15 --silent --output /dev/null --write-out '%{http_code}' "$API_URL/health")" = 200
           enabled="$(aws cloudformation describe-stacks --region us-east-1 --stack-name widthwatch-scanner-switch --query "Stacks[0].Parameters[?ParameterKey=='PublicScannerEnabled'].ParameterValue|[0]" --output text)"
           if [[ "$enabled" == "false" ]]; then
-            test "$(curl --max-time 15 --silent --output /dev/null --write-out '%{http_code}' --header 'content-type: application/json' --data '{"url":123}' "$API_URL/v1/scans")" = 403
+            headers="$(mktemp)"
+            body="$(mktemp)"
+            trap 'rm -f "$headers" "$body"' EXIT
+            test "$(curl --max-time 15 --silent --dump-header "$headers" --output "$body" --write-out '%{http_code}' --header 'Origin: https://damianociarla.github.io' --header 'content-type: application/json' --data '{"url":123}' "$API_URL/v1/scans")" = 403
+            tr -d '\r' <"$headers" >"$headers.normalized"
+            grep -Eiq '^content-type:[[:space:]]*application/json' "$headers.normalized"
+            grep -Fxiq 'access-control-allow-origin: https://damianociarla.github.io' "$headers.normalized"
+            grep -Fxiq 'cache-control: no-store' "$headers.normalized"
+            jq -e '.error == "scanner_paused"' "$body" >/dev/null
             exit 0
           fi
           test "$enabled" = true
