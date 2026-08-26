@@ -18,6 +18,7 @@ Releases normally start by pushing a stable `vX.Y.Z` tag connected to `main`. Be
 
 - `production` admits only `main` and `v*`. Application deploys and releases use its short-lived mutation roles.
 - `monitoring` admits only `main`. The scheduled canary uses `AWS_CANARY_ROLE_ARN`, whose AWS policy can only describe `widthwatch-scanner-switch`.
+- `github-pages` admits `main` for explicit recovery and `v*` for the normal release-called deployment. Pages still validates and builds the exact stable release tag.
 - Emergency switch runs are dispatched from the latest immutable release tag. Disable reads no application or alerting secret; enable additionally verifies the expected confirmed email on both SNS topics.
 
 GitHub deployment branch policies cannot select workflow filenames. OIDC trust binds each AWS role to its environment subject; workflow permissions, immutable refs and the distinct canary role provide the remaining boundary.
