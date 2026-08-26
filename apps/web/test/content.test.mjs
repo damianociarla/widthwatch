@@ -4,6 +4,7 @@ import test from "node:test";
 
 test("landing exposes the scanner, docs and published package command", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const packageVersion = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")).version;
   assert.match(html, /Trace a public page/);
   assert.match(html, /npx widthwatch https:\/\/your-site\.com/);
   assert.match(html, /Open source · Available on npm/);
@@ -22,7 +23,7 @@ test("landing exposes the scanner, docs and published package command", async ()
   assert.match(html, /Screenshots and reports are retained for 7 days/);
   assert.match(html, /anyone who has the report link/);
   assert.match(html, /npx widthwatch init/);
-  assert.match(html, /softwareVersion":"0\.4\.11/);
+  assert.ok(html.includes(`softwareVersion":"${packageVersion}`));
   assert.match(html, /id="navToggle"/);
   assert.match(html, /Reproducible evidence/);
   assert.match(html, /href="\.\/proof\.html"/);
