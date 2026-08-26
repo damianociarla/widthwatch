@@ -1,5 +1,5 @@
 openapi: 3.1.0
-info: { title: WidthWatch hosted scanner, version: 0.4.12 }
+info: { title: WidthWatch hosted scanner, version: 0.4.13 }
 servers:
   - url: "https://d35vhnded4ly3z.cloudfront.net"
     description: Bounded public scanner through CloudFront and AWS WAF
