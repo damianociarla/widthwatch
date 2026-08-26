@@ -1,5 +1,9 @@
 # Migration notes
 
+## v0.4.13
+
+The `github-pages` environment and its deployment policies are now fully versioned and reconciled with the rest of the GitHub supply-chain boundary. It admits protected `main` for explicit Pages recovery and immutable `v*` tags for the normal release-called deployment. This closes the pre-run environment rejection discovered during the first v0.4.12 Pages attempt; no scanner, report or capture protocol changes.
+
 ## v0.4.12
 
 Release execution is now forward-only: every run must name the highest stable semantic-version tag reachable from `origin/main`, and a manual recovery dispatch must additionally originate from protected `main`. Historical tags fail before validation grants access to production environments; rollback remains a separate, intentionally unsupported operation rather than an accidental use of recovery. The workflow graph and reusable workflow definitions come from protected `main`, which is therefore documented as part of the recovery trusted computing base even though every released source checkout comes from the immutable tag.
