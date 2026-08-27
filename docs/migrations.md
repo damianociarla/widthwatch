@@ -1,5 +1,9 @@
 # Migration notes
 
+## v0.4.14
+
+Standalone Pages recovery is now forward-only. A manual dispatch must originate from protected `main`, target the highest stable semantic-version tag reachable from `origin/main` and reference an existing non-draft, non-prerelease GitHub Release. Historical landing deployment is no longer possible through the recovery workflow, preventing Pages from diverging from npm and the hosted API. Rollback remains a separate, intentionally unsupported operation.
+
 ## v0.4.13
 
 The `github-pages` environment and its deployment policies are now fully versioned and reconciled with the rest of the GitHub supply-chain boundary. It admits protected `main` for explicit Pages recovery and immutable `v*` tags for the normal release-called deployment. This closes the pre-run environment rejection discovered during the first v0.4.12 Pages attempt; no scanner, report or capture protocol changes.

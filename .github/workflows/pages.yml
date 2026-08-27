@@ -24,12 +24,22 @@ jobs:
         with: { ref: "${{ env.RELEASE_TAG }}", fetch-depth: 0 }
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with: { node-version: 24, cache: npm }
+      - name: Verify Pages recovery dispatch source
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          DISPATCH_REF: ${{ github.ref }}
+        run: |
+          [[ "$DISPATCH_REF" == "refs/heads/main" ]] || {
+            echo "Pages recovery must be dispatched from main." >&2
+            exit 1
+          }
       - name: Verify published release source
         shell: bash
         run: |
           release_sha="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
           GITHUB_REF_TYPE=tag GITHUB_REF="refs/tags/$RELEASE_TAG" \
             ./infra/github/validate-release-ref.sh "$RELEASE_TAG" "$release_sha"
+          node ./infra/github/validate-latest-release-tag.mjs "$RELEASE_TAG"
           release_state="$(gh release view "$RELEASE_TAG" --json isDraft,isPrerelease --jq '"\(.isDraft):\(.isPrerelease)"')"
           [[ "$release_state" == "false:false" ]] || {
             echo "Pages may deploy only an existing non-draft, non-prerelease GitHub Release." >&2
