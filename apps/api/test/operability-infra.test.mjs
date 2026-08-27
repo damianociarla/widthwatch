@@ -224,6 +224,23 @@ test("Pages deploys only an existing stable GitHub Release and never mutable mai
   assert.match(pages, /"\$DISPATCH_REF" == "refs\/heads\/main"/);
   assert.match(pages, /gh release view "\$RELEASE_TAG" --json isDraft,isPrerelease/);
   assert.match(pages, /"false:false"/);
+  assert.match(pages, /description: Latest stable GitHub Release to redeploy/);
+
+  const orderedSteps = [
+    ["dispatch source gate", pages.indexOf("- name: Verify Pages recovery dispatch source")],
+    ["checkout", pages.indexOf("- uses: actions/checkout@")],
+    ["Node setup", pages.indexOf("- uses: actions/setup-node@")],
+    ["release gate", pages.indexOf("- name: Verify published release source")],
+    ["npm install", pages.indexOf("- run: npm ci")],
+    ["web build", pages.indexOf("- run: npm run build --workspace @widthwatch/web")],
+    ["Pages configuration", pages.indexOf("- uses: actions/configure-pages@")],
+    ["artifact upload", pages.indexOf("- uses: actions/upload-pages-artifact@")],
+    ["Pages deployment", pages.indexOf("uses: actions/deploy-pages@")],
+  ];
+  for (const [index, [name, position]] of orderedSteps.entries()) {
+    assert.notEqual(position, -1, `${name} must exist`);
+    if (index > 0) assert.ok(orderedSteps[index - 1][1] < position, `${name} must preserve fail-closed step order`);
+  }
   assert.match(release, /deploy-pages:/);
   assert.match(release, /needs: github-release/);
   assert.match(release, /uses: \.\/\.github\/workflows\/pages\.yml/);
