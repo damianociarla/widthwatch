@@ -1,5 +1,11 @@
 # Migration notes
 
+## v0.4.15
+
+Standalone Pages recovery now rejects a manual dispatch from any ref other than protected `main` before checkout or Node setup. The workflow prompt describes the operation as redeploying the latest stable GitHub Release, avoiding any implication that historical rollback is supported. The infrastructure contract test asserts the complete fail-closed step order from dispatch validation through Pages deployment so later workflow edits cannot move release checks behind install, build or deployment work.
+
+This patch does not change the scanner, report schema, sampling protocol or capture protocol. Existing baselines remain compatible.
+
 ## v0.4.14
 
 Standalone Pages recovery is now forward-only. A manual dispatch must originate from protected `main`, target the highest stable semantic-version tag reachable from `origin/main` and reference an existing non-draft, non-prerelease GitHub Release. Historical landing deployment is no longer possible through the recovery workflow, preventing Pages from diverging from npm and the hosted API. Rollback remains a separate, intentionally unsupported operation.
