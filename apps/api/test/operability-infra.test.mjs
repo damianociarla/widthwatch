@@ -219,6 +219,9 @@ test("Pages deploys only an existing stable GitHub Release and never mutable mai
   assert.match(pages, /release_tag:\s*\{ required: true, type: string \}/);
   assert.match(pages, /ref: "\$\{\{ env\.RELEASE_TAG \}\}"/);
   assert.match(pages, /validate-release-ref\.sh/);
+  assert.match(pages, /validate-latest-release-tag\.mjs "\$RELEASE_TAG"/);
+  assert.match(pages, /DISPATCH_REF: \$\{\{ github\.ref \}\}/);
+  assert.match(pages, /"\$DISPATCH_REF" == "refs\/heads\/main"/);
   assert.match(pages, /gh release view "\$RELEASE_TAG" --json isDraft,isPrerelease/);
   assert.match(pages, /"false:false"/);
   assert.match(release, /deploy-pages:/);
